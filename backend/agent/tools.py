@@ -5,6 +5,10 @@ from backend.services.llm import get_llm
 llm = get_llm()
 
 # --- Tool 1: Summarizer ---
+"""
+A chain designed to condense large volumes of text into digestible overviews.
+It enforces page citations and document-specific filtering if requested.
+"""
 summarize_prompt = PromptTemplate.from_template(
     """You are an expert document summarizer.
     
@@ -26,6 +30,10 @@ summarize_prompt = PromptTemplate.from_template(
 summarizer_chain = summarize_prompt | llm | StrOutputParser()
 
 # --- Tool 2: Q&A (RAG) ---
+"""
+A standard Retrieval-Augmented Generation chain.
+Focuses on strict adherence to context and verbatim quotes with page citations.
+"""
 qa_prompt = PromptTemplate.from_template(
     """You are a helpful research assistant.
     
@@ -44,6 +52,10 @@ qa_prompt = PromptTemplate.from_template(
 qa_chain = qa_prompt | llm | StrOutputParser()
 
 # --- Tool 3: Comparator ---
+"""
+A specialized chain for cross-document analysis.
+Forces the output into a Markdown Table format for structured side-by-side comparison.
+"""
 compare_prompt = PromptTemplate.from_template(
     """You are a data analyst.
     
@@ -62,6 +74,10 @@ compare_prompt = PromptTemplate.from_template(
 comparator_chain = compare_prompt | llm | StrOutputParser()
 
 # --- Tool 4: Data Extractor ---
+"""
+A precision-focused chain for pulling specific metrics, lists, or tables.
+Avoids conversational filler and focuses purely on structured data extraction.
+"""
 extract_prompt = PromptTemplate.from_template(
     """You are a data extraction engine.
     
@@ -79,6 +95,10 @@ extract_prompt = PromptTemplate.from_template(
 extractor_chain = extract_prompt | llm | StrOutputParser()
 
 # --- Tool 5: Insight Generator ---
+"""
+A chain for higher-level analysis and consultancy.
+Designed to handle strict length constraints and provide actionable recommendations.
+"""
 insight_prompt = PromptTemplate.from_template(
     """You are a strategic consultant.
     
