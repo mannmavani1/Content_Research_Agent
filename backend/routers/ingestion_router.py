@@ -4,7 +4,7 @@ import time
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from backend.config.settings import settings
 from backend.schemas.api_models import PasteRequest, IngestionResponse
-from backend.services.ingestion import process_document
+from backend.services.ingestion import process_document, reset_vectorstore
 
 router = APIRouter(prefix="/ingestion", tags=["Ingestion"])
 
@@ -32,6 +32,7 @@ async def paste_content(request: PasteRequest):
         raise HTTPException(status_code=400, detail="Content cannot be empty")
 
     timestamp = int(time.time())
+    if not request.filename: request.filename = "pasted_content"
     clean_filename = f"{request.filename}_{timestamp}.txt"
     file_path = os.path.join(settings.UPLOAD_DIR, clean_filename)
 
@@ -39,7 +40,7 @@ async def paste_content(request: PasteRequest):
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(request.text)
             
-        num_chunks = await process_document(file_path)
+        num_chunks = process_document(file_path)
         return IngestionResponse(
             status="success",
             filename=clean_filename,
@@ -48,4 +49,14 @@ async def paste_content(request: PasteRequest):
         )
     except Exception as e:
         if os.path.exists(file_path): os.remove(file_path)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/reset")
+def reset_vectorstore_router():
+    """Reset the vectorstore"""
+
+    try:
+        reset_vectorstore()
+        return {"message": "Vectorstore reset complete"}
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
