@@ -9,41 +9,58 @@ from backend.agent.tools import (
 from backend.services.llm import get_llm
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from backend.agent.nodes import router_node, retrieve_node, summarize_node, compare_node, extract_node, insight_node, qa_node
+from backend.agent.nodes import (
+    router_node, retrieve_node, summarize_node, 
+    compare_node, extract_node, insight_node, qa_node
+)
 
 def build_graph():
-    """Build the LangGraph workflow"""
+    """
+    Initializes and compiles the LangGraph state machine for the research agent.
+    
+    This function defines the computational graph by:
+    1. Registering nodes for retrieval, routing, and specific analysis tools.
+    2. Establishing the linear path from document retrieval to query routing.
+    3. Implementing conditional branching logic to direct the flow to specialized 
+       LLM chains based on the user's intent.
+    
+    Returns:
+        CompiledGraph: A compiled LangGraph instance ready to invoke with an AgentState.
+    """
 
     workflow = StateGraph(AgentState)
 
+    # --- Node Definitions ---
     workflow.add_node("router", router_node)
     workflow.add_node("retrieve", retrieve_node)
-
     workflow.add_node("summarize", summarize_node)
     workflow.add_node("compare", compare_node)
     workflow.add_node("extract", extract_node)
     workflow.add_node("insight", insight_node)
     workflow.add_node("qa", qa_node)
 
+    # --- Edge Definitions ---
+    # Entry flow: First retrieve context, then decide how to process it.
     workflow.set_entry_point("retrieve")
     workflow.add_edge("retrieve", "router")
 
-    def route_decision(state: AgentState):
-        """Route the decision based on the category"""
+    def route_decision(state: AgentState) -> Literal["summarize", "compare", "extract", "insight", "qa"]:
+        """
+        A conditional edge function that reads the classification from the router node.
+
+        Args:
+            state (AgentState): The current graph state containing the 'generation' key 
+                                populated by the router.
+
+        Returns:
+            str: The name of the next node to transition to.
+        """
         category = state["generation"]
-        if category == "summarize":
-            return "summarize"
-        elif category == "compare":
-            return "compare"
-        elif category == "extract":
-            return "extract"
-        elif category == "insight":
-            return "insight"
-        elif category == "qa":
-            return "qa"
-        else:
-            return "qa"
+        if category in ["summarize", "compare", "extract", "insight", "qa"]:
+            return category
+        return "qa"  # Default fallback
     
+    # --- Routing Configuration ---
     workflow.add_conditional_edges(
         "router",
         route_decision,
@@ -55,6 +72,9 @@ def build_graph():
             "qa": "qa"
         }
     )
+
+    # --- Exit Edges ---
+    # All tool nodes conclude the workflow by transitioning to the END state.
     workflow.add_edge("summarize", END)
     workflow.add_edge("compare", END)
     workflow.add_edge("extract", END)
@@ -63,4 +83,5 @@ def build_graph():
 
     return workflow.compile()
 
+# The executable instance of the research agent
 research_agent = build_graph()

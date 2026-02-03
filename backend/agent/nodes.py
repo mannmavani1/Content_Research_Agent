@@ -11,8 +11,16 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
 def router_node(state: AgentState):
-    """Router node to determine the best tool to use"""
+    """
+    Analyzes the user's query and routes the workflow to the appropriate processing node.
 
+    Args:
+        state (AgentState): The current state of the agent, containing the user's question.
+
+    Returns:
+        dict: A dictionary containing the 'generation' key with the predicted tool category 
+              (e.g., 'summarize', 'compare', 'extract', 'insight', or 'qa').
+    """
     question = state["question"]
     print(f"Routing: {question}")
 
@@ -41,59 +49,110 @@ def router_node(state: AgentState):
         decision = router_chain.invoke({"question": question})
         category = decision.get("category", "qa")
         print(f"Routed to: {category}")
-    except:
+    except Exception as e:
         category = "qa"
-        print(f"Routing failed, defaulting to: {category}")
-
-    print(f"Decision: {category}")
+        print(f"Routing failed due to {e}, defaulting to: {category}")
 
     return {"generation": category}
 
 def retrieve_node(state: AgentState):
-    """Retrieve the documents from the vector store"""
+    """
+    Queries the vector database to retrieve relevant document chunks based on the user's question.
 
+    Args:
+        state (AgentState): The current state of the agent, containing the user's question.
+
+    Returns:
+        dict: A dictionary with the 'documents' key containing a list of formatted 
+              strings representing the retrieved context and metadata.
+    """
     retriever = get_retriever()
     docs = retriever.invoke(state["question"])
     formatted_docs = []
     for d in docs:
         source_path = d.metadata.get("source", "Unknown Document")
         filename = source_path.split("/")[-1] if "/" in source_path else source_path
-        
         page_num = d.metadata.get("page", "?")
         
-        # Create a clear block for the LLM
         entry = f"Source: {filename} (Page {page_num})\nContent: {d.page_content}"
         formatted_docs.append(entry)
 
     return {"documents": formatted_docs}
 
-def run_tool(state: AgentState,chain,name):
-    """Run the tool based on the category"""
+def run_tool(state: AgentState, chain, name: str):
+    """
+    A helper function to execute a specific LangChain processing chain.
 
+    Args:
+        state (AgentState): The current state containing documents and the original question.
+        chain: The LangChain Runnable/Chain to be executed.
+        name (str): The display name of the tool for logging purposes.
+
+    Returns:
+        dict: A dictionary with the 'generation' key containing the final text output 
+              produced by the LLM chain.
+    """
     print(f"Running tool: {name}")
     context = "\n\n".join(state["documents"])
     result = chain.invoke({"context": context, "question": state["question"]})
-    print(f"Tool {name} result: {result}")
     return {"generation": result}
 
 def summarize_node(state: AgentState):
-    """Summarize the documents"""
+    """
+    Generates a concise summary or overview of the retrieved documents.
+
+    Args:
+        state (AgentState): The current state containing retrieved context.
+
+    Returns:
+        dict: The result of the summarizer_chain.
+    """
     return run_tool(state, summarizer_chain, "summarize")
 
 def compare_node(state: AgentState):
-    """Compare the documents"""
+    """
+    Performs a comparative analysis between different documents or entities within the context.
+
+    Args:
+        state (AgentState): The current state containing retrieved context.
+
+    Returns:
+        dict: The result of the comparator_chain.
+    """
     return run_tool(state, comparator_chain, "compare")
 
 def extract_node(state: AgentState):
-    """Extract the data from the documents"""
+    """
+    Identifies and pulls specific data points, tables, or facts from the retrieved documents.
+
+    Args:
+        state (AgentState): The current state containing retrieved context.
+
+    Returns:
+        dict: The result of the extractor_chain.
+    """
     return run_tool(state, extractor_chain, "extract")
 
 def insight_node(state: AgentState):
-    """Generate insights from the documents"""
+    """
+    Analyzes the data to provide recommendations, deep analysis, or strategic insights.
+
+    Args:
+        state (AgentState): The current state containing retrieved context.
+
+    Returns:
+        dict: The result of the insight_chain.
+    """
     return run_tool(state, insight_chain, "insight")
 
 def qa_node(state: AgentState):
-    """Answer the question"""
-    return run_tool(state, qa_chain, "qa")
+    """
+    Answers general or factual questions using the provided document context.
 
- 
+    Args:
+        state (AgentState): The current state containing retrieved context.
+
+    Returns:
+        dict: The result of the qa_chain.
+    """
+    return run_tool(state, qa_chain, "qa")

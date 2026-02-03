@@ -10,6 +10,23 @@ router = APIRouter(prefix="/ingestion", tags=["Ingestion"])
 
 @router.post("/upload", response_model=IngestionResponse)
 async def upload_file(file: UploadFile = File(...)):
+    """
+    Handles file uploads and triggers the indexing process.
+
+    This endpoint:
+    1. Saves the uploaded file physically to the configured `UPLOAD_DIR`.
+    2. Invokes the `process_document` service to chunk and embed the content.
+    3. Returns the status and number of chunks created.
+
+    Args:
+        file (UploadFile): The binary file object sent via multipart/form-data.
+
+    Returns:
+        IngestionResponse: structured response containing status, filename, and chunk count.
+
+    Raises:
+        HTTPException: 500 status if file saving or processing fails.
+    """
     file_path = os.path.join(settings.UPLOAD_DIR, file.filename)
     
     with open(file_path, "wb") as buffer:
@@ -24,16 +41,33 @@ async def upload_file(file: UploadFile = File(...)):
             message="File successfully indexed"
         )
     except Exception as e:
+        # In a production system, you might want to delete the file if processing fails
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/paste", response_model=IngestionResponse)
 async def paste_content(request: PasteRequest):
+    """
+    Accepts raw text input and treats it as a file for indexing.
+
+    Useful for "Paste Text" features in the UI. It creates a temporary .txt file 
+    timestamped to prevent collisions, then processes it exactly like an uploaded file.
+
+    Args:
+        request (PasteRequest): JSON body containing 'text' and an optional 'filename'.
+
+    Returns:
+        IngestionResponse: structured response containing status and chunk count.
+
+    Raises:
+        HTTPException: 400 if text is empty, 500 if file writing or processing fails.
+    """
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Content cannot be empty")
 
     timestamp = int(time.time())
-    if not request.filename: request.filename = "pasted_content"
-    clean_filename = f"{request.filename}_{timestamp}.txt"
+    # Ensure a default name if none provided
+    base_name = request.filename if request.filename else "pasted_content"
+    clean_filename = f"{base_name}_{timestamp}.txt"
     file_path = os.path.join(settings.UPLOAD_DIR, clean_filename)
 
     try:
@@ -48,13 +82,19 @@ async def paste_content(request: PasteRequest):
             message="Pasted content successfully indexed"
         )
     except Exception as e:
-        if os.path.exists(file_path): os.remove(file_path)
+        # Cleanup: remove the created file if processing failed
+        if os.path.exists(file_path): 
+            os.remove(file_path)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/reset")
 def reset_vectorstore_router():
-    """Reset the vectorstore"""
+    """
+    Clears the entire vector database.
 
+    WARNING: This is a destructive action. It deletes the persistent ChromaDB 
+    directory and re-initializes it. All indexed documents will be lost.
+    """
     try:
         reset_vectorstore()
         return {"message": "Vectorstore reset complete"}
