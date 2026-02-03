@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Agent Pro</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Markdown Styling */
+        .prose h1, .prose h2, .prose h3 { color: #1e293b; font-weight: 600; margin-top: 1.5em; margin-bottom: 0.5em; }
+        .prose p { margin-bottom: 1em; line-height: 1.7; color: #334155; }
+        .prose ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 1em; color: #475569; }
+        .prose li { margin-bottom: 0.25em; }
+        .prose strong { color: #0f172a; font-weight: 600; }
+        .prose table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 1.5em 0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+        .prose th { background: #f8fafc; padding: 12px; text-align: left; font-weight: 600; border-bottom: 1px solid #e2e8f0; color: #475569; }
+        .prose td { padding: 12px; border-bottom: 1px solid #e2e8f0; color: #334155; }
+        .prose tr:last-child td { border-bottom: none; }
+        .prose blockquote { border-left: 4px solid #3b82f6; padding-left: 1em; color: #475569; font-style: italic; }
+
+        /* Animations */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .msg-animate { animation: fadeIn 0.3s ease-out forwards; }
+
+        /* SweetAlert Glassmorphism Backdrop */
+        div:where(.swal2-container).swal2-backdrop-show,
+        div:where(.swal2-container).swal2-noanimation {
+            background: rgba(0, 0, 0, 0.4) !important;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        div:where(.swal2-popup) {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen flex text-gray-800 antialiased overflow-hidden">
+
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-3"></div>
+
+    <aside class="w-72 bg-white border-r border-gray-200 flex flex-col shadow-lg z-20 flex-shrink-0">
+        <div class="p-6 border-b border-gray-100 flex items-center gap-3">
+            <div class="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center shadow-brand-500/20 shadow-lg">
+                <span class="material-symbols-rounded text-white text-xl">dataset</span>
+            </div>
+            <div>
+                <h1 class="font-bold text-gray-900 tracking-tight">Research Agent</h1>
+                <p class="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Workspace</p>
+            </div>
+        </div>
+
+        <div class="p-4 flex-1 overflow-y-auto">
+            <div class="mb-6">
+                <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">Data Source</h2>
+                
+                <div id="drop-zone" onclick="document.getElementById('file-upload').click()" 
+                     class="group border-2 border-dashed border-gray-200 hover:border-brand-400 rounded-xl p-6 text-center transition-all cursor-pointer bg-gray-50 hover:bg-brand-50">
+                    <input type="file" id="file-upload" class="hidden" onchange="handleFileUpload(this.files)">
+                    <span class="material-symbols-rounded text-3xl text-gray-400 group-hover:text-brand-500 transition mb-2">cloud_upload</span>
+                    <p class="text-xs font-medium text-gray-600 group-hover:text-brand-700">Drop PDF/Docx here</p>
+                </div>
+
+                <div class="mt-4">
+                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-2 hidden" id="file-list-title">
+                        Indexed Files
+                    </h3>
+                    <div id="file-list" class="space-y-2">
+                        </div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">Quick Input</h2>
+                <div class="relative">
+                    <textarea id="paste-area" class="w-full h-24 p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm resize-none transition" placeholder="Paste text snippet..."></textarea>
+                    <button onclick="handlePaste()" class="absolute bottom-2 right-2 bg-white text-brand-600 p-1.5 rounded-lg shadow-sm border border-gray-200 hover:bg-brand-50 transition" title="Process Text">
+                        <span class="material-symbols-rounded text-lg">send</span>
+                    </button>
+                </div>
+            </div>
+
+            <button onclick="resetSession()" class="w-full flex items-center justify-center gap-2 p-2.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-all group">
+                <span class="material-symbols-rounded text-lg group-hover:scale-110 transition-transform">delete</span>
+                Clear Workspace
+            </button>
+        </div>
+
+        <div class="p-4 border-t border-gray-100 bg-gray-50/50">
+            <div class="flex items-center gap-2 text-xs text-gray-500">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                System Operational
+            </div>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-full bg-white relative">
+        
+        <div id="chat-history" class="flex-grow overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth">
+            <div class="flex flex-col items-center justify-center h-full text-center space-y-4 opacity-60" id="welcome-screen">
+                <div class="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-2">
+                    <span class="material-symbols-rounded text-gray-400 text-4xl">smart_toy</span>
+                </div>
+                <h2 class="text-xl font-semibold text-gray-700">What shall we analyze today?</h2>
+                <p class="text-sm text-gray-500 max-w-md">Upload a document to unlock specialized tools like Summarization, Comparison, and Data Extraction.</p>
+            </div>
+        </div>
+
+        <div class="flex-shrink-0 bg-white/80 backdrop-blur-xl border-t border-gray-100 p-6 z-10 w-full">
+            <div class="max-w-4xl mx-auto space-y-3">
+                
+                <div class="flex items-center justify-center gap-2 overflow-x-auto py-1 no-scrollbar">
+                    <button onclick="setMode('chat')" class="mode-btn active group flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all bg-gray-900 text-white shadow-lg ring-2 ring-gray-900 ring-offset-2" data-mode="chat">
+                        <span class="material-symbols-rounded text-[18px]">auto_awesome</span> Auto
+                    </button>
+                    <button onclick="setMode('summarize')" class="mode-btn group flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300" data-mode="summarize">
+                        <span class="material-symbols-rounded text-[18px]">summarize</span> Summarize
+                    </button>
+                    <button onclick="setMode('compare')" class="mode-btn group flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300" data-mode="compare">
+                        <span class="material-symbols-rounded text-[18px]">compare_arrows</span> Compare
+                    </button>
+                    <button onclick="setMode('extract')" class="mode-btn group flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300" data-mode="extract">
+                        <span class="material-symbols-rounded text-[18px]">data_table</span> Extract
+                    </button>
+                    <button onclick="setMode('insight')" class="mode-btn group flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300" data-mode="insight">
+                        <span class="material-symbols-rounded text-[18px]">lightbulb</span> Insights
+                    </button>
+                </div>
+
+                <div class="relative group">
+                    <div class="absolute -inset-0.5 bg-gradient-to-r from-brand-500 to-indigo-500 rounded-2xl opacity-20 group-hover:opacity-40 transition duration-500 blur"></div>
+                    <div class="relative flex items-center bg-white rounded-2xl shadow-sm border border-gray-200">
+                        <input type="text" id="user-input" 
+                            class="w-full bg-transparent border-none focus:ring-0 px-5 py-4 text-gray-700 placeholder-gray-400"
+                            placeholder="Ask me anything about your documents..."
+                            onkeypress="handleEnter(event)">
+                        
+                        <button onclick="sendMessage()" 
+                            class="mr-2 p-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl transition shadow-md flex items-center justify-center">
+                            <span class="material-symbols-rounded">arrow_upward</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <p class="text-center text-[10px] text-gray-400 font-medium">
+                    Current Mode: <span id="mode-label" class="text-brand-600">Auto Routing</span>
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

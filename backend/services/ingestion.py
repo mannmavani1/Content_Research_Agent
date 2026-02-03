@@ -6,6 +6,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores.utils import filter_complex_metadata
 from backend.database.vector_store import get_vectorstore
 from backend.config.settings import settings
+import shutil
 
 def get_loader_for_file(file_path: str):
     ext = os.path.splitext(file_path)[1].lower()
@@ -31,3 +32,28 @@ def process_document(file_path: str) -> int:
     vectorstore.add_documents(splits) 
     print(f"Added {len(splits)} chunks to vectorstore")
     return len(splits)
+
+def reset_vectorstore():
+    """ Hard reset: Deletes all uploaded files and clears the Vector DB. """
+    print("Resetting vectorstore...")
+    try:
+        if os.path.exists(settings.UPLOAD_DIR):
+            shutil.rmtree(settings.UPLOAD_DIR)
+        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+        vectorstore = get_vectorstore()
+        
+        result = vectorstore.get()
+        all_ids = result['ids']
+        
+        if all_ids:
+            vectorstore.delete(ids=all_ids)
+            print(f"Deleted {len(all_ids)} records from Vector DB")
+        else:
+            print("Vector DB is already empty.")
+        
+        
+    except Exception as e:
+        print(f"Warning during DB reset: {e}")
+
+    print("Vectorstore reset complete")
