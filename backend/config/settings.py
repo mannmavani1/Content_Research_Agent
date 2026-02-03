@@ -11,7 +11,7 @@ class Settings:
     VECTOR_DB_DIR = os.path.join(STORAGE_DIR, "vector_db")
     
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
-    LLM_MODEL: str = "llama3" 
+    LLM_MODEL: str = "llama-3.3-70b-versatile" 
 
     def init_dirs(self):
         os.makedirs(self.UPLOAD_DIR, exist_ok=True)

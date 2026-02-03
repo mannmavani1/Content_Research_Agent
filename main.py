@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from backend.config.settings import settings
 from backend.routers import ingestion_router
-
+from backend.routers import chat_router
 # Initialize App
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 
@@ -24,7 +24,7 @@ app.add_middleware(
 
 # Register Routers
 app.include_router(ingestion_router.router)
-
+app.include_router(chat_router.router)
 @app.get("/")
 def home():
     return {"message": "System is running", "docs_url": "/docs"}
