@@ -39,7 +39,7 @@ async def paste_content(request: PasteRequest):
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(request.text)
             
-        num_chunks = process_document(file_path)
+        num_chunks = await process_document(file_path)
         return IngestionResponse(
             status="success",
             filename=clean_filename,
