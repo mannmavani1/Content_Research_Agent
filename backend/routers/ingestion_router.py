@@ -41,7 +41,8 @@ async def upload_file(file: UploadFile = File(...)):
             message="File successfully indexed"
         )
     except Exception as e:
-        # In a production system, you might want to delete the file if processing fails
+        if os.path.exists(file_path):
+            os.remove(file_path)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/paste", response_model=IngestionResponse)
@@ -82,7 +83,6 @@ async def paste_content(request: PasteRequest):
             message="Pasted content successfully indexed"
         )
     except Exception as e:
-        # Cleanup: remove the created file if processing failed
         if os.path.exists(file_path): 
             os.remove(file_path)
         raise HTTPException(status_code=500, detail=str(e))
