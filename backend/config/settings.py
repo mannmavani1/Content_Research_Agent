@@ -27,7 +27,7 @@ class Settings:
     VECTOR_DB_DIR = os.path.join(STORAGE_DIR, "vector_db")
     
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
-    LLM_MODEL: str = "llama-3.3-70b-versatile" 
+    LLM_MODEL: str = "moonshotai/kimi-k2-instruct-0905" 
 
     def init_dirs(self):
         """
