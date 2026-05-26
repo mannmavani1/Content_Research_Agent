@@ -6,6 +6,12 @@ let currentMode = "chat";
 // ==========================================
 window.addEventListener('DOMContentLoaded', async () => {
     console.log("Page loaded, clearing old session data...");
+    
+    // Request Native Push Notification Permission for a professional background response alert
+    if (window.Notification && Notification.permission === "default") {
+        Notification.requestPermission();
+    }
+
     try {
         await fetch(`${API_URL}/ingestion/reset`, { method: "POST" });
         showToast("Session reset. Ready for research.", "info");
@@ -15,27 +21,39 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ==========================================
-// 2. TOAST NOTIFICATION SYSTEM
+// 2. TOAST NOTIFICATION SYSTEM & PUSH ALERTS
 // ==========================================
 function showToast(message, type = "info") {
     const container = document.getElementById("toast-container");
     const toast = document.createElement("div");
     
     const colors = {
-        success: "bg-green-50 text-green-800 border-green-200",
-        error: "bg-red-50 text-red-800 border-red-200",
-        info: "bg-white text-gray-800 border-gray-200 shadow-lg"
+        success: "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20",
+        error: "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20",
+        info: "bg-white text-slate-800 border-slate-200 dark:bg-slate-900/90 dark:text-white dark:border-white/10 shadow-2xl backdrop-blur-md"
     };
     const icon = { success: "check_circle", error: "error", info: "info" };
 
-    toast.className = `flex items-center gap-3 px-4 py-3 rounded-xl border ${colors[type]} shadow-sm min-w-[300px] transform transition-all duration-300 translate-x-full opacity-0`;
+    toast.className = `flex items-center gap-3 px-4 py-3 rounded-xl border ${colors[type]} shadow-lg min-w-[300px] transform transition-all duration-300 translate-x-full opacity-0`;
     toast.innerHTML = `
         <span class="material-symbols-rounded text-lg">${icon[type]}</span>
-        <p class="text-sm font-medium">${message}</p>
+        <p class="text-xs font-semibold">${message}</p>
     `;
 
     container.appendChild(toast);
     
+    // Send Native Desktop Push Notification if the tab is hidden or minimized
+    if (document.hidden && window.Notification && Notification.permission === "granted") {
+        try {
+            new Notification("RAG Studio Update", {
+                body: message,
+                tag: "rag-studio-notification"
+            });
+        } catch (e) {
+            console.error("Failed to fire native push notification:", e);
+        }
+    }
+
     // Animate In
     requestAnimationFrame(() => toast.classList.remove("translate-x-full", "opacity-0"));
     
@@ -56,20 +74,80 @@ function addFileCard(filename) {
     title.classList.remove("hidden");
 
     const card = document.createElement("div");
-    card.className = "bg-white border border-gray-200 rounded-lg p-3 shadow-sm flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300";
+    card.className = "glass-card border border-slate-200 dark:border-white/5 rounded-xl p-3 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 hover:border-brand-500/30 transition-all group/card relative overflow-hidden";
     card.innerHTML = `
-        <div class="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center flex-shrink-0">
-            <span class="material-symbols-rounded text-brand-600 text-lg">description</span>
+        <div class="w-8 h-8 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0">
+            <span class="material-symbols-rounded text-brand-600 dark:text-brand-400 text-base">description</span>
         </div>
         <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-gray-800 truncate" title="${filename}">${filename}</p>
-            <p class="text-[10px] text-green-600 flex items-center gap-1 font-medium">
-                <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> Ready
+            <p class="text-xs font-semibold text-slate-700 dark:text-slate-100 truncate pr-6" title="${filename}">${filename}</p>
+            <p class="text-[9px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-bold">
+                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> Ready
             </p>
         </div>
+        <button onclick="deleteFileWorkspace(event, '${filename}', this.closest('.glass-card'))" 
+                class="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 opacity-0 group-hover/card:opacity-100 transition-all duration-200" 
+                title="Remove File">
+            <span class="material-symbols-rounded text-base">delete</span>
+        </button>
     `;
     list.appendChild(card);
     card.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
+async function deleteFileWorkspace(event, filename, cardElement) {
+    event.stopPropagation();
+    
+    const result = await Swal.fire({
+        title: 'Delete Document?',
+        text: `Are you sure you want to remove ${filename} from your workspace knowledge base?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444', 
+        cancelButtonColor: '#1f2937',
+        confirmButtonText: 'Delete',
+        cancelButtonText: 'Cancel',
+        background: '#ffffff',
+        color: '#1f2937',
+        customClass: {
+            popup: 'rounded-2xl shadow-2xl border border-gray-100 font-sans',
+            title: 'text-xl font-bold text-gray-800',
+            htmlContainer: 'text-sm text-gray-500',
+            confirmButton: 'rounded-xl px-5 py-2.5 text-sm font-bold shadow-lg hover:shadow-red-500/30 transition-all',
+            cancelButton: 'rounded-xl px-5 py-2.5 text-sm font-medium hover:bg-gray-100 transition-all'
+        }
+    });
+
+    if (result.isConfirmed) {
+        showToast(`Removing ${filename}...`, "info");
+        try {
+            const response = await fetch(`${API_URL}/ingestion/file?filename=${encodeURIComponent(filename)}`, {
+                method: "DELETE"
+            });
+            const data = await response.json();
+            
+            if (response.ok && data.status === 200) {
+                showToast(data.message, "success");
+                
+                // Animate the card slide out and remove it
+                cardElement.classList.add("translate-x-full", "opacity-0");
+                setTimeout(() => {
+                    cardElement.remove();
+                    
+                    // Hide header list if empty
+                    const list = document.getElementById("file-list");
+                    const title = document.getElementById("file-list-title");
+                    if (list.children.length === 0) {
+                        title.classList.add("hidden");
+                    }
+                }, 300);
+            } else {
+                throw new Error(data.message || "Failed to delete file from workspace");
+            }
+        } catch (error) {
+            showToast(error.message, "error");
+        }
+    }
 }
 
 // ==========================================
@@ -280,9 +358,9 @@ function appendMessage(role, text) {
         downloadBtn = `
             <div class="flex justify-end mt-2">
                 <button onclick="downloadReport('${encodeURIComponent(text)}')" 
-                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-all group"
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-slate-400 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-500/20 rounded-lg transition-all group"
                         title="Download as Markdown">
-                    <span class="material-symbols-rounded text-base text-gray-400 group-hover:text-brand-600 transition">download</span>
+                    <span class="material-symbols-rounded text-sm text-slate-500 group-hover:text-brand-400 transition">download</span>
                     Download Report
                 </button>
             </div>
@@ -290,11 +368,11 @@ function appendMessage(role, text) {
     }
 
     div.innerHTML = `
-        <div class="w-9 h-9 rounded-xl ${isBot ? "bg-brand-100 text-brand-600" : "bg-gray-200 text-gray-600"} flex items-center justify-center flex-shrink-0 shadow-sm">
-            <span class="material-symbols-rounded text-xl">${isBot ? "smart_toy" : "person"}</span>
+        <div class="w-9 h-9 rounded-xl ${isBot ? "bg-brand-500/10 border border-brand-500/20 text-brand-400" : "bg-slate-800 border border-white/5 text-slate-300"} flex items-center justify-center flex-shrink-0 shadow-md">
+            <span class="material-symbols-rounded text-lg">${isBot ? "terminal" : "person"}</span>
         </div>
         <div class="flex-1 max-w-3xl">
-            <div class="${isBot ? "bg-white border border-gray-100 shadow-sm text-gray-800" : "bg-brand-600 text-white shadow-md"} px-6 py-4 rounded-2xl ${isBot ? "rounded-tl-none" : "rounded-tr-none"} text-[15px] leading-relaxed prose prose-p:my-1 prose-ul:my-1 w-full">
+            <div class="${isBot ? "glass-card border border-white/5 text-slate-200" : "bg-gradient-to-r from-brand-600 to-indigo-600 text-white shadow-xl shadow-brand-600/10"} px-5 py-4 rounded-2xl ${isBot ? "rounded-tl-none" : "rounded-tr-none"} text-[13px] leading-relaxed prose prose-p:my-1 prose-ul:my-1 w-full">
                 ${contentHtml}
             </div>
             ${downloadBtn}
@@ -311,12 +389,12 @@ function appendLoading() {
     div.id = id;
     div.className = "msg-animate flex gap-4 max-w-4xl mx-auto";
     div.innerHTML = `
-        <div class="w-9 h-9 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center flex-shrink-0">
-            <span class="material-symbols-rounded text-xl">smart_toy</span>
+        <div class="w-9 h-9 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 flex items-center justify-center flex-shrink-0">
+            <span class="material-symbols-rounded text-lg">terminal</span>
         </div>
-        <div class="bg-white px-6 py-4 rounded-2xl rounded-tl-none shadow-sm border border-gray-100 flex items-center gap-2">
-            <span class="text-sm text-gray-400 font-medium">Thinking</span>
-            <div class="flex gap-1">
+        <div class="glass-card px-5 py-4 rounded-2xl rounded-tl-none border border-white/5 flex items-center gap-2">
+            <span class="text-xs text-slate-400 font-bold uppercase tracking-wider">Analyzing</span>
+            <div class="flex gap-1.5">
                 <div class="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce"></div>
                 <div class="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
                 <div class="w-1.5 h-1.5 bg-brand-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
@@ -353,5 +431,52 @@ function downloadReport(encodedText) {
     } catch (e) {
         console.error(e);
         showToast("Failed to download report", "error");
+    }
+}
+
+// ==========================================
+// 10. SAMPLE PROMPT TRIGGERS & DRAG-DROP
+// ==========================================
+function clickSamplePrompt(text) {
+    const input = document.getElementById("user-input");
+    if (!input) return;
+    input.value = text;
+    sendMessage();
+}
+
+window.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    const overlay = document.getElementById('drag-overlay');
+    const card = document.getElementById('drag-overlay-card');
+    if (overlay && card) {
+        overlay.classList.remove('opacity-0', 'pointer-events-none', 'scale-95');
+        card.classList.remove('scale-95');
+    }
+});
+
+window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+});
+
+window.addEventListener('dragleave', (e) => {
+    if (e.relatedTarget === null || e.fromElement === null) {
+        dismissDragOverlay();
+    }
+});
+
+window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dismissDragOverlay();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleFileUpload(e.dataTransfer.files);
+    }
+});
+
+function dismissDragOverlay() {
+    const overlay = document.getElementById('drag-overlay');
+    const card = document.getElementById('drag-overlay-card');
+    if (overlay && card) {
+        overlay.classList.add('opacity-0', 'pointer-events-none', 'scale-95');
+        card.classList.add('scale-95');
     }
 }

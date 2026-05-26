@@ -103,3 +103,39 @@ def reset_database_router():
         return success_response(message="Database reset complete")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/file", response_model=StandardResponse)
+async def delete_file(filename: str):
+    """
+    Deletes a specific file physically and removes its chunks from the SQLite database.
+    """
+    if not filename.strip():
+        raise HTTPException(status_code=400, detail="Filename cannot be empty")
+    
+    # 1. Physical file delete
+    file_path = os.path.join(settings.UPLOAD_DIR, filename)
+    physical_deleted = False
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+            physical_deleted = True
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to delete file physically: {str(e)}")
+            
+    # 2. Database chunks delete
+    try:
+        from backend.database.database import delete_document_chunks
+        chunks_deleted = delete_document_chunks(filename)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to remove database records: {str(e)}")
+        
+    if not physical_deleted and chunks_deleted == 0:
+        raise HTTPException(status_code=404, detail="File not found in active workspace")
+        
+    return success_response(
+        message=f"Successfully removed {filename} from workspace",
+        data={
+            "filename": filename,
+            "chunks_removed": chunks_deleted
+        }
+    )

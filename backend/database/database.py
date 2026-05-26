@@ -135,3 +135,31 @@ def search_documents(query: str, k: int = 5):
     except sqlite3.OperationalError as e:
         print(f"Search error: {e}")
         return []
+
+def delete_document_chunks(filename: str) -> int:
+    """
+    Deletes all chunks associated with a specific filename from the SQLite database.
+    """
+    import os
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, metadata FROM documents")
+        rows = cursor.fetchall()
+        
+        ids_to_delete = []
+        for row in rows:
+            try:
+                meta = json.loads(row['metadata']) if row['metadata'] else {}
+                source = meta.get("source", "")
+                if os.path.basename(source) == filename or source == filename:
+                    ids_to_delete.append(row['id'])
+            except Exception:
+                continue
+        
+        if ids_to_delete:
+            placeholders = ",".join("?" for _ in ids_to_delete)
+            cursor.execute(f"DELETE FROM documents WHERE id IN ({placeholders})", ids_to_delete)
+            conn.commit()
+            return len(ids_to_delete)
+        return 0

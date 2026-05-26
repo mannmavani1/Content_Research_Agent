@@ -1,181 +1,438 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Content Research Agent</title>
+    <title>Content Research Agent — Premium RAG Studio</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0" rel="stylesheet" />
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <script>
+        // Check local storage or OS preference before Tailwind loads
+        if (localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    fontFamily: { 
+                        sans: ['Plus Jakarta Sans', 'Inter', 'sans-serif'],
+                        display: ['Outfit', 'sans-serif']
+                    },
                     colors: {
-                        brand: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' }
+                        brand: { 
+                            50: '#f5f3ff', 
+                            100: '#ede9fe', 
+                            200: '#ddd6fe',
+                            500: '#8b5cf6', 
+                            600: '#7c3aed', 
+                            700: '#6d28d9',
+                            900: '#4c1d95' 
+                        },
+                        slateDark: {
+                            50: '#f8fafc',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                            950: '#070a13'
+                        }
                     }
                 }
             }
         }
     </script>
     <style>
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        /* Custom Scrollbar for premium dark/light theme */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.05); }
+        .dark ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.3); }
+        ::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.15); border-radius: 10px; }
+        .dark ::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.3); }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 246, 0.4); }
+        .dark ::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 246, 0.6); }
 
-        /* Markdown Styling */
-        .prose h1, .prose h2, .prose h3 { color: #1e293b; font-weight: 600; margin-top: 1.5em; margin-bottom: 0.5em; }
-        .prose p { margin-bottom: 1em; line-height: 1.7; color: #334155; }
+        /* Premium Glassmorphic properties */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(0, 0, 0, 0.05);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.03);
+        }
+        .dark .glass-panel {
+            background: rgba(15, 23, 42, 0.65);
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: none;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 0, 0, 0.04);
+            box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.02);
+        }
+        .dark .glass-card {
+            background: rgba(30, 41, 59, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            box-shadow: none;
+        }
+
+        /* Markdown Styling inside responses */
+        .prose h1, .prose h2, .prose h3 { color: #0f172a; font-weight: 600; margin-top: 1.25em; margin-bottom: 0.5em; font-family: 'Outfit', sans-serif; }
+        .dark .prose h1, .dark .prose h2, .dark .prose h3 { color: #f8fafc; }
+        .prose h1 { font-size: 1.5rem; }
+        .prose h2 { font-size: 1.25rem; }
+        .prose h3 { font-size: 1.1rem; }
+        .prose p { margin-bottom: 0.85em; line-height: 1.75; color: #334155; }
+        .dark .prose p { color: #cbd5e1; }
         .prose ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 1em; color: #475569; }
-        .prose li { margin-bottom: 0.25em; }
+        .dark .prose ul { color: #cbd5e1; }
+        .prose li { margin-bottom: 0.35em; }
         .prose strong { color: #0f172a; font-weight: 600; }
-        .prose table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 1.5em 0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-        .prose th { background: #f8fafc; padding: 12px; text-align: left; font-weight: 600; border-bottom: 1px solid #e2e8f0; color: #475569; }
-        .prose td { padding: 12px; border-bottom: 1px solid #e2e8f0; color: #334155; }
+        .dark .prose strong { color: #f1f5f9; }
+        
+        .prose table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 1.5em 0; border: 1px solid rgba(0, 0, 0, 0.06); border-radius: 12px; overflow: hidden; background: rgba(255, 255, 255, 0.4); }
+        .dark .prose table { border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(15, 23, 42, 0.4); }
+        
+        .prose th { background: rgba(241, 245, 249, 0.8); padding: 12px 16px; text-align: left; font-weight: 600; border-bottom: 1px solid rgba(0, 0, 0, 0.06); color: #334155; }
+        .dark .prose th { background: rgba(30, 41, 59, 0.7); border-bottom: 1px solid rgba(255, 255, 255, 0.08); color: #e2e8f0; }
+        
+        .prose td { padding: 12px 16px; border-bottom: 1px solid rgba(0, 0, 0, 0.04); color: #475569; }
+        .dark .prose td { border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: #cbd5e1; }
         .prose tr:last-child td { border-bottom: none; }
-        .prose blockquote { border-left: 4px solid #3b82f6; padding-left: 1em; color: #475569; font-style: italic; }
+        
+        .prose blockquote { border-left: 4px solid #7c3aed; padding-left: 1.25em; color: #475569; font-style: italic; background: rgba(124, 58, 237, 0.04); py: 2px; }
+        .dark .prose blockquote { border-left-color: #8b5cf6; color: #94a3b8; background: rgba(139, 92, 246, 0.05); }
 
         /* Animations */
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .msg-animate { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes blob-bounce {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-20px) scale(1.05); }
+        }
+        .animate-blob {
+            animation: blob-bounce 10s infinite ease-in-out;
+        }
+        .animation-delay-2000 {
+            animation-delay: 2s;
+        }
 
-        /* SweetAlert Glassmorphism Backdrop */
-        div:where(.swal2-container).swal2-backdrop-show,
-        div:where(.swal2-container).swal2-noanimation {
-            background: rgba(0, 0, 0, 0.4) !important;
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+        @keyframes fadeInUp { 
+            from { opacity: 0; transform: translateY(12px) scale(0.98); } 
+            to { opacity: 1; transform: translateY(0) scale(1); } 
+        }
+        .msg-animate { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+        /* Custom scrollbar remover for horizontal menu */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Beautiful SweetAlert theme override */
+        div:where(.swal2-container).swal2-backdrop-show {
+            background: rgba(15, 23, 42, 0.3) !important;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .dark div:where(.swal2-container).swal2-backdrop-show {
+            background: rgba(7, 10, 19, 0.6) !important;
         }
         div:where(.swal2-popup) {
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
-            border: 1px solid rgba(255, 255, 255, 0.8);
+            background: #ffffff !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            color: #1f2937 !important;
+            border-radius: 24px !important;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1) !important;
+        }
+        .dark div:where(.swal2-popup) {
+            background: #111827 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            color: #f3f4f6 !important;
+            box-shadow: none !important;
         }
     </style>
 </head>
-<body class="bg-gray-50 h-screen flex text-gray-800 antialiased overflow-hidden">
+<body class="bg-slate-50 dark:bg-slateDark-950 text-slate-800 dark:text-gray-200 h-screen flex antialiased overflow-hidden font-sans relative transition-colors duration-300">
 
-    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-3"></div>
-
-    <aside class="w-72 bg-white border-r border-gray-200 flex flex-col shadow-lg z-20 flex-shrink-0">
-        <div class="p-6 border-b border-gray-100 flex items-center gap-3">
-            <div class="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center shadow-brand-500/20 shadow-lg">
-                <span class="material-symbols-rounded text-white text-xl">dataset</span>
+    <!-- Screen-wide Glass Drag and Drop Masking -->
+    <div id="drag-overlay" class="fixed inset-0 z-50 bg-brand-500/10 dark:bg-brand-900/20 backdrop-blur-md border-4 border-dashed border-brand-500 flex flex-col items-center justify-center pointer-events-none transition-all duration-300 opacity-0 scale-95">
+        <div class="p-8 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl flex flex-col items-center text-center max-w-sm border border-slate-200 dark:border-white/10 scale-95 transition-transform duration-300" id="drag-overlay-card">
+            <div class="w-16 h-16 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mb-4">
+                <span class="material-symbols-rounded text-3xl text-brand-500 animate-bounce">cloud_upload</span>
             </div>
-            <div>
-                <h1 class="font-bold text-gray-900 tracking-tight">Content Research Agent</h1>
-                <p class="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Workspace</p>
-            </div>
+            <h3 class="font-display font-bold text-lg text-slate-800 dark:text-white">Drop File to Index</h3>
+            <p class="text-xs text-slate-400 mt-1.5">Directly upload and chunk context into RAG Studio</p>
         </div>
+    </div>
 
-        <div class="p-4 flex-1 overflow-y-auto">
-            <div class="mb-6">
-                <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">Data Source</h2>
-                
-                <div id="drop-zone" onclick="document.getElementById('file-upload').click()" 
-                     class="group border-2 border-dashed border-gray-200 hover:border-brand-400 rounded-xl p-6 text-center transition-all cursor-pointer bg-gray-50 hover:bg-brand-50">
-                    <input type="file" id="file-upload" class="hidden" onchange="handleFileUpload(this.files)">
-                    <span class="material-symbols-rounded text-3xl text-gray-400 group-hover:text-brand-500 transition mb-2">cloud_upload</span>
-                    <p class="text-xs font-medium text-gray-600 group-hover:text-brand-700">Drop PDF/Docx here</p>
+    <!-- Mobile Drawer Backdrop -->
+    <div id="sidebar-backdrop" onclick="toggleSidebar(false)" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-30 hidden transition-opacity duration-300 opacity-0 lg:hidden"></div>
+
+    <!-- Interactive Neon Blobs for Atmospheric Depth (only glowing in dark mode) -->
+    <div class="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-brand-500/5 dark:bg-brand-700/10 blur-[150px] pointer-events-none animate-blob"></div>
+    <div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/5 dark:bg-indigo-600/10 blur-[150px] pointer-events-none animate-blob animation-delay-2000"></div>
+
+    <div id="toast-container" class="fixed top-6 right-6 z-50 flex flex-col gap-3"></div>
+
+    <!-- Glassmorphic Sidebar Drawer -->
+    <aside id="sidebar-panel" class="w-80 glass-panel flex flex-col z-40 flex-shrink-0 transition-all duration-300 fixed lg:static top-0 left-0 h-full -translate-x-full lg:translate-x-0">
+        <!-- Logo & Header -->
+        <div class="p-6 border-b border-slate-200/60 dark:border-white/5 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-gradient-to-tr from-brand-600 to-indigo-500 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/20">
+                    <span class="material-symbols-rounded text-white text-2xl font-semibold">explore</span>
                 </div>
-
-                <div class="mt-4">
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-2 hidden" id="file-list-title">
-                        Indexed Files
-                    </h3>
-                    <div id="file-list" class="space-y-2">
-                        </div>
-                </div>
-            </div>
-
-            <div class="mb-6">
-                <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">Quick Input</h2>
-                <div class="relative">
-                    <textarea id="paste-area" class="w-full h-24 p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm resize-none transition" placeholder="Paste text snippet..."></textarea>
-                    <button onclick="handlePaste()" class="absolute bottom-2 right-2 bg-white text-brand-600 p-1.5 rounded-lg shadow-sm border border-gray-200 hover:bg-brand-50 transition" title="Process Text">
-                        <span class="material-symbols-rounded text-lg">send</span>
-                    </button>
+                <div>
+                    <h1 class="font-display font-bold text-lg text-slate-800 dark:text-white tracking-wide bg-gradient-to-r from-slate-900 via-slate-800 to-slate-600 dark:from-white dark:via-slate-100 dark:to-slate-400 bg-clip-text text-transparent">RAG Studio</h1>
+                    <p class="text-[9px] text-brand-600 dark:text-brand-200 font-semibold uppercase tracking-widest">Content Intel Agent</p>
                 </div>
             </div>
-
-            <button onclick="resetSession()" class="w-full flex items-center justify-center gap-2 p-2.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-all group">
-                <span class="material-symbols-rounded text-lg group-hover:scale-110 transition-transform">delete</span>
-                Clear Workspace
+            <!-- Mobile Close Button -->
+            <button onclick="toggleSidebar(false)" class="lg:hidden p-2 rounded-lg hover:bg-slate-200/50 dark:hover:bg-white/5 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition-all flex items-center justify-center" title="Close Menu">
+                <span class="material-symbols-rounded text-lg">close</span>
             </button>
         </div>
 
-        <div class="p-4 border-t border-gray-100 bg-gray-50/50">
-            <div class="flex items-center gap-2 text-xs text-gray-500">
-                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                System Operational
+        <!-- Scrollable Sidebar Control Panel -->
+        <div class="p-5 flex-1 overflow-y-auto space-y-6">
+            <!-- Data Sources -->
+            <div class="space-y-3">
+                <div class="flex items-center justify-between px-1">
+                    <h2 class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Data Sources</h2>
+                    <span class="text-[9px] bg-brand-500/10 text-brand-600 dark:text-brand-300 font-bold px-2 py-0.5 rounded-full border border-brand-500/20">Vectorless</span>
+                </div>
+                
+                <div id="drop-zone" onclick="document.getElementById('file-upload').click()" 
+                     class="group border border-dashed border-slate-300 dark:border-white/10 hover:border-brand-500/50 rounded-2xl p-5 text-center transition-all duration-300 cursor-pointer bg-slate-100/50 dark:bg-white/[0.02] hover:bg-brand-500/[0.04]">
+                    <input type="file" id="file-upload" class="hidden" onchange="handleFileUpload(this.files)">
+                    <div class="w-12 h-12 rounded-xl bg-slate-200/50 dark:bg-white/[0.03] group-hover:bg-brand-500/10 flex items-center justify-center mx-auto mb-3 transition-colors">
+                        <span class="material-symbols-rounded text-2xl text-slate-500 dark:text-slate-400 group-hover:text-brand-500 transition-colors">cloud_upload</span>
+                    </div>
+                    <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 group-hover:text-brand-600 dark:group-hover:text-white transition-colors">Upload Document</p>
+                    <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Supports PDF, DOCX, TXT</p>
+                </div>
+
+                <div class="space-y-2">
+                    <h3 class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mt-4 px-1 hidden" id="file-list-title">
+                        Active Knowledge Base
+                    </h3>
+                    <div id="file-list" class="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                        <!-- Dynamic file lists added here -->
+                    </div>
+                </div>
             </div>
+
+            <!-- Custom Divider -->
+            <div class="h-[1px] bg-gradient-to-r from-transparent via-slate-300/30 dark:via-white/5 to-transparent"></div>
+
+            <!-- Snippet input -->
+            <div class="space-y-3">
+                <h2 class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest px-1">Raw Context Paste</h2>
+                <div class="relative rounded-2xl border border-slate-300/60 dark:border-white/5 bg-slate-100/50 dark:bg-white/[0.02] overflow-hidden focus-within:border-brand-500/50 transition-colors">
+                    <textarea id="paste-area" class="w-full h-28 p-4 bg-transparent border-none text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-0 text-xs resize-none transition" placeholder="Paste structural data, notes, or articles here..."></textarea>
+                    <div class="absolute bottom-2.5 right-2.5">
+                        <button onclick="handlePaste()" class="bg-brand-600 hover:bg-brand-700 text-white p-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center animate-pulse" title="Process Text">
+                            <span class="material-symbols-rounded text-sm">bolt</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar footer status -->
+        <div class="p-4 border-t border-slate-200/60 dark:border-white/5 bg-slate-100/40 dark:bg-slateDark-950/40 flex items-center justify-between transition-colors duration-300">
+            <div class="flex items-center gap-2 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                Engine Operational
+            </div>
+            <button onclick="resetSession()" class="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/10 dark:border-rose-500/5 hover:border-rose-500/20 rounded-lg transition-all">
+                <span class="material-symbols-rounded text-xs">delete_sweep</span>
+                Reset Studio
+            </button>
         </div>
     </aside>
 
-    <main class="flex-1 flex flex-col h-full bg-white relative">
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col h-full bg-transparent relative">
         
-        <div id="chat-history" class="flex-grow overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth">
-            <div class="flex flex-col items-center justify-center h-full text-center space-y-4 opacity-60" id="welcome-screen">
-                <div class="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-2">
-                    <span class="material-symbols-rounded text-gray-400 text-4xl">smart_toy</span>
+        <!-- Top Workspace Bar -->
+        <header class="h-16 border-b border-slate-200/60 dark:border-white/5 flex items-center justify-between px-6 lg:px-8 z-10 bg-white/20 dark:bg-slateDark-950/20 backdrop-blur-md transition-colors duration-300">
+            <div class="flex items-center gap-3">
+                <!-- Mobile Sidebar Trigger -->
+                <button onclick="toggleSidebar(true)" class="lg:hidden p-2 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/5 text-slate-600 dark:text-slate-400 hover:text-brand-600 dark:hover:text-white transition-all flex items-center justify-center shadow-sm" title="Open Menu">
+                    <span class="material-symbols-rounded text-lg">menu</span>
+                </button>
+                <span class="text-xs bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full border border-slate-300/30 dark:border-white/5 font-semibold font-display">Workspace v1.2</span>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <!-- Theme Toggle Button -->
+                <button id="theme-toggle" class="w-8 h-8 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-white transition-all flex items-center justify-center shadow-sm">
+                    <span id="theme-toggle-dark-icon" class="material-symbols-rounded text-lg hidden">dark_mode</span>
+                    <span id="theme-toggle-light-icon" class="material-symbols-rounded text-lg hidden">light_mode</span>
+                </button>
+                
+                <div class="flex items-center gap-2">
+                    <div class="h-1.5 w-1.5 rounded-full bg-emerald-400"></div>
+                    <span class="text-[10px] uppercase font-bold tracking-widest text-slate-400 dark:text-slate-500">Secure Environment</span>
                 </div>
-                <h2 class="text-xl font-semibold text-gray-700">What shall we analyze today?</h2>
-                <p class="text-sm text-gray-500 max-w-md">Upload a document to unlock specialized tools like Summarization, Comparison, and Data Extraction.</p>
+            </div>
+        </header>
+
+        <!-- Chat Workspace -->
+        <div id="chat-history" class="flex-grow overflow-y-auto p-6 md:p-8 space-y-6 scroll-smooth z-10">
+            <!-- Dynamic Welcome Screen -->
+            <div class="flex flex-col items-center justify-center h-full text-center max-w-2xl mx-auto space-y-6" id="welcome-screen">
+                <div class="w-16 h-16 bg-brand-500/5 dark:bg-gradient-to-tr dark:from-brand-600/20 dark:to-indigo-500/20 border border-brand-500/20 dark:border-brand-500/30 rounded-2xl flex items-center justify-center shadow-inner animate-pulse">
+                    <span class="material-symbols-rounded text-brand-600 dark:text-brand-400 text-3xl">terminal</span>
+                </div>
+                <div class="space-y-2">
+                    <h2 class="font-display font-bold text-2xl text-slate-800 dark:text-white tracking-wide">Enter the RAG Playground</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-md mx-auto">Upload target intelligence, paste unstructured payloads, and run localized reasoning tasks with dynamic contextual execution.</p>
+                </div>
+                
+                <!-- Quick Suggestion Shortcuts -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-xl pt-2">
+                    <button onclick="clickSamplePrompt('Summarize the main findings of the uploaded documents.')" class="glass-card p-4 rounded-2xl border text-left hover:border-brand-500/40 hover:bg-brand-500/[0.02] transition group flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-500 shrink-0">
+                            <span class="material-symbols-rounded text-base">short_text</span>
+                        </div>
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200">Summarize Content</h4>
+                            <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 group-hover:text-slate-500 dark:group-hover:text-slate-300 transition">Get a comprehensive overview of main topics.</p>
+                        </div>
+                    </button>
+                    <button onclick="clickSamplePrompt('Compare the similarities and differences across the uploaded content.')" class="glass-card p-4 rounded-2xl border text-left hover:border-brand-500/40 hover:bg-brand-500/[0.02] transition group flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
+                            <span class="material-symbols-rounded text-base">balance</span>
+                        </div>
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200">Compare Sources</h4>
+                            <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 group-hover:text-slate-500 dark:group-hover:text-slate-300 transition">Cross-reference themes and contradictions.</p>
+                        </div>
+                    </button>
+                    <button onclick="clickSamplePrompt('Extract all structural data, figures, and tables into markdown format.')" class="glass-card p-4 rounded-2xl border text-left hover:border-brand-500/40 hover:bg-brand-500/[0.02] transition group flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
+                            <span class="material-symbols-rounded text-base">pivot_table_chart</span>
+                        </div>
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200">Extract Data</h4>
+                            <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 group-hover:text-slate-500 dark:group-hover:text-slate-300 transition">Retrieve structured tables and datasets.</p>
+                        </div>
+                    </button>
+                    <button onclick="clickSamplePrompt('Identify key strategic recommendations and critical insights.')" class="glass-card p-4 rounded-2xl border text-left hover:border-brand-500/40 hover:bg-brand-500/[0.02] transition group flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-500 shrink-0">
+                            <span class="material-symbols-rounded text-base">emoji_objects</span>
+                        </div>
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200">Get Recommendations</h4>
+                            <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 group-hover:text-slate-500 dark:group-hover:text-slate-300 transition">Synthesize intelligence and action points.</p>
+                        </div>
+                    </button>
+                </div>
             </div>
         </div>
 
-        <div class="flex-shrink-0 bg-white/80 backdrop-blur-xl border-t border-gray-100 p-6 z-10 w-full">
-            <div class="max-w-4xl mx-auto space-y-3">
+        <!-- Chat Action Inputs -->
+        <div class="flex-shrink-0 bg-gradient-to-t from-slate-50 dark:from-slateDark-950 via-slate-50/80 dark:via-slateDark-950/60 to-transparent p-6 z-10 w-full transition-colors duration-300">
+            <div class="max-w-4xl mx-auto space-y-4">
                 
-                <div class="flex items-center justify-center gap-2 overflow-x-auto py-1 no-scrollbar">
-                    <button onclick="setMode('chat')" class="mode-btn active group flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all bg-gray-900 text-white shadow-lg ring-2 ring-gray-900 ring-offset-2" data-mode="chat">
-                        <span class="material-symbols-rounded text-[18px]">auto_awesome</span> Auto
+                <!-- Quick Mode Toggle Tabs -->
+                <div class="flex items-center justify-center gap-2 overflow-x-auto py-1.5 no-scrollbar bg-slate-200/70 dark:bg-slate-900/60 border border-slate-300/30 dark:border-white/5 rounded-full px-2 max-w-xl mx-auto backdrop-blur-md transition-colors duration-300">
+                    <button onclick="setMode('chat')" class="mode-btn active group flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold transition-all duration-300 bg-brand-600 text-white shadow-md" data-mode="chat">
+                        <span class="material-symbols-rounded text-sm">auto_awesome</span> Auto
                     </button>
-                    <button onclick="setMode('summarize')" class="mode-btn group flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300" data-mode="summarize">
-                        <span class="material-symbols-rounded text-[18px]">summarize</span> Summarize
+                    <button onclick="setMode('summarize')" class="mode-btn group flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold transition-all duration-300 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" data-mode="summarize">
+                        <span class="material-symbols-rounded text-sm">short_text</span> Summarize
                     </button>
-                    <button onclick="setMode('compare')" class="mode-btn group flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300" data-mode="compare">
-                        <span class="material-symbols-rounded text-[18px]">compare_arrows</span> Compare
+                    <button onclick="setMode('compare')" class="mode-btn group flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold transition-all duration-300 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" data-mode="compare">
+                        <span class="material-symbols-rounded text-sm">balance</span> Compare
                     </button>
-                    <button onclick="setMode('extract')" class="mode-btn group flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300" data-mode="extract">
-                        <span class="material-symbols-rounded text-[18px]">data_table</span> Extract
+                    <button onclick="setMode('extract')" class="mode-btn group flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold transition-all duration-300 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" data-mode="extract">
+                        <span class="material-symbols-rounded text-sm">pivot_table_chart</span> Extract
                     </button>
-                    <button onclick="setMode('insight')" class="mode-btn group flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300" data-mode="insight">
-                        <span class="material-symbols-rounded text-[18px]">lightbulb</span> Insights
+                    <button onclick="setMode('insight')" class="mode-btn group flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold transition-all duration-300 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" data-mode="insight">
+                        <span class="material-symbols-rounded text-sm">emoji_objects</span> Insights
                     </button>
                 </div>
 
-                <div class="relative group">
-                    <div class="absolute -inset-0.5 bg-gradient-to-r from-brand-500 to-indigo-500 rounded-2xl opacity-20 group-hover:opacity-40 transition duration-500 blur"></div>
-                    <div class="relative flex items-center bg-white rounded-2xl shadow-sm border border-gray-200">
+                <!-- Input Interface -->
+                <div class="relative group max-w-3xl mx-auto">
+                    <div class="absolute -inset-0.5 bg-gradient-to-r from-brand-600 to-indigo-500 rounded-2xl opacity-10 dark:opacity-20 group-hover:opacity-30 dark:group-hover:opacity-40 transition duration-500 blur-md"></div>
+                    <div class="relative flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden shadow-xl dark:shadow-2xl focus-within:border-brand-500/50 transition-colors pr-2.5">
                         <input type="text" id="user-input" 
-                            class="w-full bg-transparent border-none focus:ring-0 px-5 py-4 text-gray-700 placeholder-gray-400"
-                            placeholder="Ask me anything about your documents..."
+                            class="w-full bg-transparent border-none focus:outline-none focus:ring-0 px-6 py-4.5 text-sm text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
+                            placeholder="Formulate queries or tasks for your loaded knowledge..."
                             onkeypress="handleEnter(event)">
                         
                         <button onclick="sendMessage()" 
-                            class="mr-2 p-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl transition shadow-md flex items-center justify-center">
-                            <span class="material-symbols-rounded">arrow_upward</span>
+                            class="p-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl shadow-md shadow-brand-600/20 active:scale-95 transition-all flex items-center justify-center">
+                            <span class="material-symbols-rounded text-lg">arrow_forward</span>
                         </button>
                     </div>
                 </div>
                 
-                <p class="text-center text-[10px] text-gray-400 font-medium">
-                    Current Mode: <span id="mode-label" class="text-brand-600">Auto Routing</span>
+                <p class="text-center text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                    Engine Route: <span id="mode-label" class="text-brand-600 dark:text-brand-400 font-bold uppercase tracking-wider">Auto Routing</span>
                 </p>
             </div>
         </div>
     </main>
 
+    <!-- Theme Switch Script -->
+    <script>
+        const themeToggleBtn = document.getElementById('theme-toggle');
+        const darkIcon = document.getElementById('theme-toggle-dark-icon');
+        const lightIcon = document.getElementById('theme-toggle-light-icon');
+
+        // Toggle Icons on startup
+        if (document.documentElement.classList.contains('dark')) {
+            lightIcon.classList.remove('hidden');
+        } else {
+            darkIcon.classList.remove('hidden');
+        }
+
+        themeToggleBtn.addEventListener('click', function() {
+            // toggle icons
+            darkIcon.classList.toggle('hidden');
+            lightIcon.classList.toggle('hidden');
+
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.setItem('color-theme', 'light');
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.setItem('color-theme', 'dark');
+            }
+        });
+
+        // Sidebar Drawer toggle utility
+        function toggleSidebar(open) {
+            const sidebar = document.getElementById('sidebar-panel');
+            const backdrop = document.getElementById('sidebar-backdrop');
+            if (open) {
+                sidebar.classList.remove('-translate-x-full');
+                backdrop.classList.remove('hidden');
+                setTimeout(() => backdrop.classList.add('opacity-100'), 10);
+            } else {
+                sidebar.classList.add('-translate-x-full');
+                backdrop.classList.remove('opacity-100');
+                setTimeout(() => backdrop.classList.add('hidden'), 300);
+            }
+        }
+    </script>
     <script src="/static/script.js"></script>
 </body>
 </html>
