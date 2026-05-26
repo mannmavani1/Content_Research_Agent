@@ -13,7 +13,6 @@ build==1.4.0
 certifi==2026.1.4
 cffi==2.0.0
 charset-normalizer==3.4.4
-chromadb==1.4.1
 click==8.3.1
 coloredlogs==15.0.1
 cryptography==46.0.4
@@ -55,12 +54,10 @@ jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 kubernetes==35.0.0
 langchain==1.2.8
-langchain-chroma==1.1.0
 langchain-classic==1.0.1
 langchain-community==0.4.1
 langchain-core==1.2.8
 langchain-groq==1.1.2
-langchain-huggingface==1.2.0
 langchain-ollama==1.0.1
 langchain-text-splitters==1.1.0
 langdetect==1.0.9
@@ -135,7 +132,6 @@ rpds-py==0.30.0
 safetensors==0.7.0
 scikit-learn==1.8.0
 scipy==1.17.0
-sentence-transformers==5.2.2
 setuptools==80.10.2
 shellingham==1.5.4
 six==1.17.0

@@ -3,12 +3,13 @@ import shutil
 import time
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from backend.config.settings import settings
-from backend.schemas.api_models import PasteRequest, IngestionResponse
-from backend.services.ingestion import process_document, reset_vectorstore
+from backend.schemas.api_models import PasteRequest, StandardResponse
+from backend.utils.responses import success_response
+from backend.services.ingestion import process_document, reset_database
 
 router = APIRouter(prefix="/ingestion", tags=["Ingestion"])
 
-@router.post("/upload", response_model=IngestionResponse)
+@router.post("/upload", response_model=StandardResponse)
 async def upload_file(file: UploadFile = File(...)):
     """
     Handles file uploads and triggers the indexing process.
@@ -34,18 +35,19 @@ async def upload_file(file: UploadFile = File(...)):
     
     try:
         num_chunks = process_document(file_path)
-        return IngestionResponse(
-            status="success",
-            filename=file.filename,
-            chunks_processed=num_chunks,
-            message="File successfully indexed"
+        return success_response(
+            message="File successfully indexed",
+            data={
+                "filename": file.filename,
+                "chunks_processed": num_chunks
+            }
         )
     except Exception as e:
         if os.path.exists(file_path):
             os.remove(file_path)
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/paste", response_model=IngestionResponse)
+@router.post("/paste", response_model=StandardResponse)
 async def paste_content(request: PasteRequest):
     """
     Accepts raw text input and treats it as a file for indexing.
@@ -76,11 +78,12 @@ async def paste_content(request: PasteRequest):
             f.write(request.text)
             
         num_chunks = process_document(file_path)
-        return IngestionResponse(
-            status="success",
-            filename=clean_filename,
-            chunks_processed=num_chunks,
-            message="Pasted content successfully indexed"
+        return success_response(
+            message="Pasted content successfully indexed",
+            data={
+                "filename": clean_filename,
+                "chunks_processed": num_chunks
+            }
         )
     except Exception as e:
         if os.path.exists(file_path): 
@@ -88,15 +91,15 @@ async def paste_content(request: PasteRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/reset")
-def reset_vectorstore_router():
+def reset_database_router():
     """
-    Clears the entire vector database.
+    Clears the entire local database.
 
-    WARNING: This is a destructive action. It deletes the persistent ChromaDB 
-    directory and re-initializes it. All indexed documents will be lost.
+    WARNING: This is a destructive action. It deletes the persistent SQLite 
+    database and re-initializes it. All indexed documents will be lost.
     """
     try:
-        reset_vectorstore()
-        return {"message": "Vectorstore reset complete"}
+        reset_database()
+        return success_response(message="Database reset complete")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

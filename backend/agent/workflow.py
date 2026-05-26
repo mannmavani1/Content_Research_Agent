@@ -1,7 +1,7 @@
 from typing import Literal
 from langgraph.graph import StateGraph, END
 from backend.models.state import AgentState
-from backend.database.vector_store import get_retriever
+from backend.database.retriever import get_retriever
 from backend.agent.tools import (
     summarizer_chain, qa_chain, comparator_chain, 
     extractor_chain, insight_chain

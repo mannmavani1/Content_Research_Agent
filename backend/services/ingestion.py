@@ -5,7 +5,7 @@ from langchain_community.document_loaders import (
 )
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores.utils import filter_complex_metadata
-from backend.database.vector_store import get_vectorstore
+from backend.database.database import add_documents, init_db
 from backend.config.settings import settings
 
 def get_loader_for_file(file_path: str):
@@ -60,24 +60,23 @@ def process_document(file_path: str) -> int:
     print(f"Split into {len(splits)} chunks")
     
     # 3. Store
-    vectorstore = get_vectorstore()
-    vectorstore.add_documents(splits) 
-    print(f"Added {len(splits)} chunks to vectorstore")
+    add_documents(splits)
+    print(f"Added {len(splits)} chunks to local database")
     
     return len(splits)
 
-def reset_vectorstore():
+def reset_database():
     """
     Performs a hard reset of the system's memory.
 
     This function is destructive:
     1. Deletes the physical `uploads` directory to remove raw files.
     2. Re-creates the `uploads` directory.
-    3. Connects to the Vector DB and deletes all indexed records by ID.
+    3. Deletes the local SQLite database file to clear all indexed records.
     
     Used primarily for testing or when the user wants to start a fresh session.
     """
-    print("Resetting vectorstore...")
+    print("Resetting database...")
     try:
         # Physical cleanup
         if os.path.exists(settings.UPLOAD_DIR):
@@ -85,17 +84,16 @@ def reset_vectorstore():
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
         # Database cleanup
-        vectorstore = get_vectorstore()
-        result = vectorstore.get()
-        all_ids = result['ids']
-        
-        if all_ids:
-            vectorstore.delete(ids=all_ids)
-            print(f"Deleted {len(all_ids)} records from Vector DB")
+        if os.path.exists(settings.LOCAL_DB_PATH):
+            os.remove(settings.LOCAL_DB_PATH)
+            print("Deleted local SQLite database.")
         else:
-            print("Vector DB is already empty.")
+            print("Database is already empty.")
+        
+        # Re-initialize the db schema
+        init_db()
         
     except Exception as e:
         print(f"Warning during DB reset: {e}")
 
-    print("Vectorstore reset complete")
+    print("Database reset complete")

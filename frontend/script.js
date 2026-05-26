@@ -87,11 +87,11 @@ async function handleFileUpload(files) {
         const response = await fetch(`${API_URL}/ingestion/upload`, { method: "POST", body: formData });
         const data = await response.json();
         
-        if (response.ok) {
-            showToast(`Indexed ${file.name}`, "success");
-            addFileCard(file.name); 
+        if (response.ok && data.status === 200) {
+            showToast(data.message, "success");
+            addFileCard(data.data.filename); 
         } else {
-            throw new Error(data.detail);
+            throw new Error(data.message || "Failed to upload file");
         }
     } catch (error) {
         showToast(error.message, "error");
@@ -110,13 +110,15 @@ async function handlePaste() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text: text })
         });
-        if (response.ok) {
-            const data = await response.json();
-            showToast("Text snippet indexed", "success");
+        const data = await response.json();
+        if (response.ok && data.status === 200) {
+            showToast(data.message, "success");
             document.getElementById("paste-area").value = "";
-            addFileCard(data.filename); 
+            addFileCard(data.data.filename); 
+        } else {
+            throw new Error(data.message || "Failed to process text");
         }
-    } catch (e) { showToast("Failed to process text", "error"); }
+    } catch (e) { showToast(e.message, "error"); }
 }
 
 // ==========================================
@@ -159,7 +161,9 @@ async function resetSession() {
         });
 
         try {
-            await fetch(`${API_URL}/ingestion/reset`, { method: "POST" });
+            const response = await fetch(`${API_URL}/ingestion/reset`, { method: "POST" });
+            const data = await response.json();
+            if (!response.ok || data.status !== 200) throw new Error(data.message || "Could not reset session.");
             
             // UI Cleanup
             document.getElementById("chat-history").innerHTML = "";
@@ -245,7 +249,13 @@ async function sendMessage() {
         });
         const data = await response.json();
         removeLoading(loadingId);
-        appendMessage("bot", data.answer);
+        
+        if (response.ok && data.status === 200) {
+            appendMessage("bot", data.data.answer);
+        } else {
+            appendMessage("bot", "**Error:** " + (data.message || "Unknown error"));
+            showToast(data.message || "Server error", "error");
+        }
     } catch (error) {
         removeLoading(loadingId);
         appendMessage("bot", "**Error:** Could not connect to the agent.");

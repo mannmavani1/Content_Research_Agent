@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from backend.schemas.api_models import ChatRequest
+from backend.utils.responses import success_response
 from backend.agent.workflow import research_agent
 
 router = APIRouter(prefix="/tools", tags=["Research Tools"])
@@ -37,9 +38,10 @@ async def run_agent(message: str, force_mode: str = None):
             initial_state["question"] = message
 
         result = research_agent.invoke(initial_state)
-        return {
-            "answer": result["generation"]
-        }
+        return success_response(
+            message="Answer Fetched Successful",
+            data={"answer": result["generation"]}
+        )
     except Exception as e:
         print(f"Error executing agent: {e}")
         raise HTTPException(status_code=500, detail=str(e))

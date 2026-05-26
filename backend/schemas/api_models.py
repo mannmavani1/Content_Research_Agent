@@ -1,3 +1,4 @@
+from typing import Any, Optional
 from pydantic import BaseModel
 
 class PasteRequest(BaseModel):
@@ -14,22 +15,20 @@ class PasteRequest(BaseModel):
     text: str
     filename: str = "pasted_content"
 
-class IngestionResponse(BaseModel):
+class StandardResponse(BaseModel):
     """
-    Standardized response model for all data ingestion operations.
-
-    Returned by both /upload and /paste endpoints to confirm successful indexing.
-
+    Standardized API response model for both success and error payloads.
+    
     Attributes:
-        status (str): The outcome of the operation (e.g., "success", "error").
-        filename (str): The name of the file (or virtual file) that was processed.
-        chunks_processed (int): The number of text chunks created and stored in the vector DB.
+        status (int): HTTP status code.
         message (str): A human-readable status message for the UI.
+        data (dict, optional): The payload for successful operations.
+        error (dict, optional): Error details if any.
     """
-    status: str
-    filename: str
-    chunks_processed: int
+    status: int
     message: str
+    data: Optional[Any] = None
+    error: Optional[Any] = None
 
 class ChatRequest(BaseModel):
     """

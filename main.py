@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from backend.utils.exceptions import add_exception_handlers
 
 # Ensure the backend module can be found in the system path.
 # This fixes import errors when running the script directly from the root directory.
@@ -46,6 +47,9 @@ app.add_middleware(
 # Mount the specialized routers to keep the API logic modular and clean.
 app.include_router(ingestion_router.router)
 app.include_router(chat_router.router)
+
+# --- Exception Handlers ---
+add_exception_handlers(app)
 
 # --- Frontend Serving ---
 # Mount the "frontend" directory to serve static assets (JS, CSS, Images).
