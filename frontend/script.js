@@ -1,26 +1,245 @@
 const API_URL = ""; 
 let currentMode = "chat";
+let currentConversationId = null;
 
 // ==========================================
 // 1. INITIALIZATION & AUTO-RESET
 // ==========================================
 window.addEventListener('DOMContentLoaded', async () => {
-    console.log("Page loaded, clearing old session data...");
+    console.log("Page loaded, fetching session data...");
     
-    // Request Native Push Notification Permission for a professional background response alert
     if (window.Notification && Notification.permission === "default") {
         Notification.requestPermission();
     }
 
     try {
-        await fetch(`${API_URL}/ingestion/reset`, { method: "POST" });
-        showToast("Session reset. Ready for research.", "info");
+        await loadConversations();
     } catch (e) {
-        console.error("Failed to reset session:", e);
+        console.error("Failed to load session:", e);
     }
 });
 
 // ==========================================
+
+// ==========================================
+// 1.5 CONVERSATION MANAGEMENT
+// ==========================================
+async function loadConversations() {
+    try {
+        const response = await fetch(`${API_URL}/tools/conversations`);
+        const data = await response.json();
+        const list = document.getElementById("conversation-list");
+        if (!list) return;
+        list.innerHTML = "";
+        
+        if (data.data && data.data.length > 0) {
+            data.data.forEach(conv => {
+                const wrapper = document.createElement("div");
+                wrapper.className = `group flex items-center justify-between p-2 rounded-lg transition-all duration-200 cursor-pointer ${currentConversationId === conv.id ? 'bg-brand-50 border border-brand-200 dark:bg-brand-900/20 dark:border-brand-500/30 shadow-sm' : 'hover:bg-gray-50 dark:hover:bg-white/5 border border-transparent'}`;
+                
+                const btn = document.createElement("button");
+                btn.className = `flex-1 text-left text-xs font-bold tracking-wider truncate mr-2 ${currentConversationId === conv.id ? 'text-brand-600 dark:text-brand-400' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}`;
+                btn.textContent = conv.title;
+                btn.onclick = () => switchConversation(conv.id);
+                
+                const actions = document.createElement("div");
+                actions.className = "hidden group-hover:flex items-center gap-1 flex-shrink-0";
+                
+                const renameBtn = document.createElement("button");
+                renameBtn.className = "text-gray-400 hover:text-brand-500 transition-colors p-1";
+                renameBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">edit</span>';
+                renameBtn.onclick = (e) => { e.stopPropagation(); renameConversation(conv.id, conv.title); };
+                
+                const deleteBtn = document.createElement("button");
+                deleteBtn.className = "text-gray-400 hover:text-rose-500 transition-colors p-1";
+                deleteBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">delete</span>';
+                deleteBtn.onclick = (e) => { e.stopPropagation(); deleteConversation(conv.id); };
+                
+                actions.appendChild(renameBtn);
+                actions.appendChild(deleteBtn);
+                
+                wrapper.appendChild(btn);
+                wrapper.appendChild(actions);
+                list.appendChild(wrapper);
+            });
+            if (!currentConversationId) {
+                switchConversation(data.data[0].id);
+            }
+        } else {
+            await createNewConversation();
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function renameConversation(id, currentTitle) {
+    const { value: newTitle } = await Swal.fire({
+        title: 'Rename Chat',
+        input: 'text',
+        inputValue: currentTitle,
+        showCancelButton: true,
+        confirmButtonText: 'Save',
+        confirmButtonColor: '#8b5cf6',
+        inputValidator: (value) => {
+            if (!value) return 'You need to write something!';
+        }
+    });
+
+    if (newTitle && newTitle !== currentTitle) {
+        try {
+            await fetch(`${API_URL}/tools/conversations/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: newTitle })
+            });
+            showToast("Chat renamed", "success");
+            await loadConversationsWithoutSwitching();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+}
+
+async function deleteConversation(id) {
+    const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: "This will permanently delete this conversation.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#f43f5e',
+        cancelButtonColor: '#8b5cf6',
+        confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (result.isConfirmed) {
+        try {
+            await fetch(`${API_URL}/tools/conversations/${id}`, { method: "DELETE" });
+            showToast("Chat deleted", "info");
+            
+            if (currentConversationId === id) {
+                currentConversationId = null;
+                await loadConversations();
+            } else {
+                await loadConversationsWithoutSwitching();
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+}
+
+async function createNewConversation() {
+    try {
+        const response = await fetch(`${API_URL}/tools/conversations`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "New Chat" })
+        });
+        const data = await response.json();
+        if (data.status === 200) {
+            await loadConversations();
+            switchConversation(data.data.id);
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function switchConversation(id) {
+    currentConversationId = id;
+    const history = document.getElementById("chat-history");
+    history.innerHTML = ""; 
+    
+    const welcome = document.getElementById("welcome-screen");
+    if (welcome) welcome.style.display = "none";
+    
+    await loadConversationsWithoutSwitching();
+    
+    try {
+        const response = await fetch(`${API_URL}/tools/conversations/${id}`);
+        const data = await response.json();
+        if (data.status === 200 && data.data) {
+            data.data.forEach(msg => {
+                appendMessage(msg.role, msg.content, false);
+            });
+        }
+    } catch (e) {
+        console.error(e);
+    }
+    
+    // Fetch and populate active files for this conversation
+    await fetchActiveFiles(id);
+}
+
+async function fetchActiveFiles(conversationId) {
+    if (!conversationId) return;
+    
+    const list = document.getElementById("file-list");
+    const title = document.getElementById("file-list-title");
+    
+    // Clear current list
+    list.innerHTML = "";
+    title.classList.add("hidden");
+    
+    try {
+        const response = await fetch(`${API_URL}/ingestion/files/${conversationId}`);
+        const data = await response.json();
+        if (data.status === 200 && data.data && data.data.files.length > 0) {
+            title.classList.remove("hidden");
+            data.data.files.forEach(filename => {
+                addFileCard(filename);
+            });
+        }
+    } catch (e) {
+        console.error("Failed to fetch active files:", e);
+    }
+}
+
+async function loadConversationsWithoutSwitching() {
+    try {
+        const response = await fetch(`${API_URL}/tools/conversations`);
+        const data = await response.json();
+        const list = document.getElementById("conversation-list");
+        if (!list) return;
+        list.innerHTML = "";
+        
+        if (data.data) {
+            data.data.forEach(conv => {
+                const wrapper = document.createElement("div");
+                wrapper.className = `group flex items-center justify-between p-2 rounded-lg transition-all duration-200 cursor-pointer ${currentConversationId === conv.id ? 'bg-brand-50 border border-brand-200 dark:bg-brand-900/20 dark:border-brand-500/30 shadow-sm' : 'hover:bg-gray-50 dark:hover:bg-white/5 border border-transparent'}`;
+                
+                const btn = document.createElement("button");
+                btn.className = `flex-1 text-left text-xs font-bold tracking-wider truncate mr-2 ${currentConversationId === conv.id ? 'text-brand-600 dark:text-brand-400' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}`;
+                btn.textContent = conv.title;
+                btn.onclick = () => switchConversation(conv.id);
+                
+                const actions = document.createElement("div");
+                actions.className = "hidden group-hover:flex items-center gap-1 flex-shrink-0";
+                
+                const renameBtn = document.createElement("button");
+                renameBtn.className = "text-gray-400 hover:text-brand-500 transition-colors p-1";
+                renameBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">edit</span>';
+                renameBtn.onclick = (e) => { e.stopPropagation(); renameConversation(conv.id, conv.title); };
+                
+                const deleteBtn = document.createElement("button");
+                deleteBtn.className = "text-gray-400 hover:text-rose-500 transition-colors p-1";
+                deleteBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">delete</span>';
+                deleteBtn.onclick = (e) => { e.stopPropagation(); deleteConversation(conv.id); };
+                
+                actions.appendChild(renameBtn);
+                actions.appendChild(deleteBtn);
+                
+                wrapper.appendChild(btn);
+                wrapper.appendChild(actions);
+                list.appendChild(wrapper);
+            });
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
 // 2. TOAST NOTIFICATION SYSTEM & PUSH ALERTS
 // ==========================================
 function showToast(message, type = "info") {
@@ -121,7 +340,11 @@ async function deleteFileWorkspace(event, filename, cardElement) {
     if (result.isConfirmed) {
         showToast(`Removing ${filename}...`, "info");
         try {
-            const response = await fetch(`${API_URL}/ingestion/file?filename=${encodeURIComponent(filename)}`, {
+            let url = `${API_URL}/ingestion/file?filename=${encodeURIComponent(filename)}`;
+            if (currentConversationId) {
+                url += `&conversation_id=${currentConversationId}`;
+            }
+            const response = await fetch(url, {
                 method: "DELETE"
             });
             const data = await response.json();
@@ -158,6 +381,9 @@ async function handleFileUpload(files) {
     const file = files[0];
     const formData = new FormData();
     formData.append("file", file);
+    if (currentConversationId) {
+        formData.append("conversation_id", currentConversationId);
+    }
 
     showToast("Uploading and indexing...", "info");
 
@@ -180,13 +406,16 @@ async function handlePaste() {
     const text = document.getElementById("paste-area").value;
     if (!text.trim()) { showToast("Please enter some text", "error"); return; }
     
-    showToast("Processing text snippet...", "info");
-
     try {
+        const bodyData = { text: text };
+        if (currentConversationId) {
+            bodyData.conversation_id = currentConversationId;
+        }
+        
         const response = await fetch(`${API_URL}/ingestion/paste`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: text })
+            body: JSON.stringify(bodyData)
         });
         const data = await response.json();
         if (response.ok && data.status === 200) {
@@ -239,7 +468,11 @@ async function resetSession() {
         });
 
         try {
-            const response = await fetch(`${API_URL}/ingestion/reset`, { method: "POST" });
+            let url = `${API_URL}/ingestion/reset`;
+            if (currentConversationId) {
+                url += `?conversation_id=${currentConversationId}`;
+            }
+            const response = await fetch(url, { method: "POST" });
             const data = await response.json();
             if (!response.ok || data.status !== 200) throw new Error(data.message || "Could not reset session.");
             
@@ -319,11 +552,16 @@ async function sendMessage() {
     const loadingId = appendLoading();
 
     try {
+        const bodyData = { message: message };
+        if (currentConversationId) {
+            bodyData.conversation_id = currentConversationId;
+        }
+
         const endpoint = `${API_URL}/tools/${currentMode}`;
         const response = await fetch(endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: message })
+            body: JSON.stringify(bodyData)
         });
         const data = await response.json();
         removeLoading(loadingId);
@@ -480,3 +718,11 @@ function dismissDragOverlay() {
         card.classList.add('scale-95');
     }
 }
+// Cmd+K shortcut to focus input
+document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        const input = document.getElementById('user-input');
+        if (input) input.focus();
+    }
+});

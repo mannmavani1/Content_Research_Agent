@@ -11,6 +11,7 @@ class VectorlessRetriever(BaseRetriever):
     A Langchain-compatible retriever that uses local SQLite FTS5 for vectorless search.
     """
     k: int = Field(default=5)
+    conversation_id: int = Field(default=None)
 
     def _get_relevant_documents(
         self, query: str, *, run_manager: CallbackManagerForRetrieverRun
@@ -18,7 +19,7 @@ class VectorlessRetriever(BaseRetriever):
         """
         Retrieves documents matching the query using full-text search.
         """
-        results = search_documents(query, k=self.k)
+        results = search_documents(query, conversation_id=self.conversation_id, k=self.k)
         
         documents = []
         for content, metadata in results:
@@ -26,8 +27,8 @@ class VectorlessRetriever(BaseRetriever):
             
         return documents
 
-def get_retriever() -> VectorlessRetriever:
+def get_retriever(conversation_id: int = None) -> VectorlessRetriever:
     """
     Returns an instance of the VectorlessRetriever.
     """
-    return VectorlessRetriever(k=5)
+    return VectorlessRetriever(k=5, conversation_id=conversation_id)

@@ -1,7 +1,8 @@
 import os
 import shutil
 import time
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Path
+from typing import Optional
 from backend.config.settings import settings
 from backend.schemas.api_models import PasteRequest, StandardResponse
 from backend.utils.responses import success_response
@@ -10,7 +11,7 @@ from backend.services.ingestion import process_document, reset_database
 router = APIRouter(prefix="/ingestion", tags=["Ingestion"])
 
 @router.post("/upload", response_model=StandardResponse)
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...), conversation_id: Optional[int] = Form(None)):
     """
     Handles file uploads and triggers the indexing process.
 
@@ -34,7 +35,7 @@ async def upload_file(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
     
     try:
-        num_chunks = process_document(file_path)
+        num_chunks = process_document(file_path, conversation_id=conversation_id)
         return success_response(
             message="File successfully indexed",
             data={
@@ -77,7 +78,7 @@ async def paste_content(request: PasteRequest):
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(request.text)
             
-        num_chunks = process_document(file_path)
+        num_chunks = process_document(file_path, conversation_id=request.conversation_id)
         return success_response(
             message="Pasted content successfully indexed",
             data={
@@ -91,21 +92,18 @@ async def paste_content(request: PasteRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/reset")
-def reset_database_router():
+def reset_database_router(conversation_id: Optional[int] = None):
     """
-    Clears the entire local database.
-
-    WARNING: This is a destructive action. It deletes the persistent SQLite 
-    database and re-initializes it. All indexed documents will be lost.
+    Clears the entire local database or only for a specific conversation.
     """
     try:
-        reset_database()
+        reset_database(conversation_id)
         return success_response(message="Database reset complete")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/file", response_model=StandardResponse)
-async def delete_file(filename: str):
+async def delete_file(filename: str, conversation_id: Optional[int] = None):
     """
     Deletes a specific file physically and removes its chunks from the SQLite database.
     """
@@ -125,7 +123,7 @@ async def delete_file(filename: str):
     # 2. Database chunks delete
     try:
         from backend.database.database import delete_document_chunks
-        chunks_deleted = delete_document_chunks(filename)
+        chunks_deleted = delete_document_chunks(filename, conversation_id=conversation_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to remove database records: {str(e)}")
         
@@ -139,3 +137,18 @@ async def delete_file(filename: str):
             "chunks_removed": chunks_deleted
         }
     )
+
+@router.get("/files/{conversation_id}", response_model=StandardResponse)
+async def get_files(conversation_id: int = Path(...)):
+    """
+    Fetches the list of filenames active in the specified conversation.
+    """
+    try:
+        from backend.database.database import get_files_for_conversation
+        files = get_files_for_conversation(conversation_id)
+        return success_response(
+            message="Files fetched successfully",
+            data={"files": files}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

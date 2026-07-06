@@ -14,6 +14,7 @@ class PasteRequest(BaseModel):
     """
     text: str
     filename: str = "pasted_content"
+    conversation_id: Optional[int] = None
 
 class StandardResponse(BaseModel):
     """
@@ -36,9 +37,13 @@ class ChatRequest(BaseModel):
 
     Attributes:
         message (str): The user's natural language query or command.
-        session_id (str): A unique identifier for the conversation session. 
-                          Currently defaults to "default", but useful for future 
-                          multi-user or persistent history implementations.
+        conversation_id (int, optional): The ID of the conversation to append to.
     """
     message: str
-    session_id: str = "default"
+    conversation_id: Optional[int] = None
+
+class CreateConversationRequest(BaseModel):
+    title: str = "New Chat"
+
+class RenameConversationRequest(BaseModel):
+    title: str

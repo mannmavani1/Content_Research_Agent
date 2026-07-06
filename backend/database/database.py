@@ -55,7 +55,90 @@ def init_db():
             END;
         """)
         
+        # Table for storing conversation sessions
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Table for storing messages within a conversation
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+            )
+        """)
+        
         conn.commit()
+
+def create_conversation(title: str = "New Chat") -> dict:
+    """Creates a new conversation session."""
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO conversations (title) VALUES (?)", (title,))
+        conn.commit()
+        return {"id": cursor.lastrowid, "title": title}
+
+def get_conversations() -> list:
+    """Returns a list of all conversations ordered by recent activity."""
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC")
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+def delete_conversation(conversation_id: int):
+    """Deletes a conversation and all its messages via ON DELETE CASCADE."""
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+        conn.commit()
+
+def rename_conversation(conversation_id: int, new_title: str):
+    """Updates the title of a conversation."""
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE conversations SET title = ? WHERE id = ?", (new_title, conversation_id))
+        conn.commit()
+
+def add_message(conversation_id: int, role: str, content: str):
+    """Appends a message to a conversation and updates the conversation timestamp."""
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)",
+            (conversation_id, role, content)
+        )
+        cursor.execute(
+            "UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (conversation_id,)
+        )
+        conn.commit()
+
+def get_messages(conversation_id: int) -> list:
+    """Returns all messages for a specific conversation in chronological order."""
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, role, content, timestamp FROM messages WHERE conversation_id = ? ORDER BY id ASC",
+            (conversation_id,)
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
 
 def add_documents(documents):
     """
@@ -77,7 +160,7 @@ def add_documents(documents):
             )
         conn.commit()
 
-def search_documents(query: str, k: int = 5):
+def search_documents(query: str, conversation_id: int = None, k: int = 5):
     """
     Searches the documents using FTS5 (which uses BM25 internally).
     
@@ -100,25 +183,44 @@ def search_documents(query: str, k: int = 5):
             
             # Try matching with OR for better recall in natural language
             if or_query:
-                cursor.execute(f"""
-                    SELECT documents.content, documents.metadata, bm25(documents_fts) as score
-                    FROM documents_fts
-                    JOIN documents ON documents.id = documents_fts.rowid
-                    WHERE documents_fts MATCH ?
-                    ORDER BY score
-                    LIMIT ?
-                """, (or_query, k))
+                if conversation_id is not None:
+                    cursor.execute(f"""
+                        SELECT documents.content, documents.metadata, bm25(documents_fts) as score
+                        FROM documents_fts
+                        JOIN documents ON documents.id = documents_fts.rowid
+                        WHERE documents_fts MATCH ? AND json_extract(documents.metadata, '$.conversation_id') = ?
+                        ORDER BY score
+                        LIMIT ?
+                    """, (or_query, conversation_id, k))
+                else:
+                    cursor.execute(f"""
+                        SELECT documents.content, documents.metadata, bm25(documents_fts) as score
+                        FROM documents_fts
+                        JOIN documents ON documents.id = documents_fts.rowid
+                        WHERE documents_fts MATCH ?
+                        ORDER BY score
+                        LIMIT ?
+                    """, (or_query, k))
                 results = cursor.fetchall()
             
             # Fallback: if no keyword match is found (common with generic queries like "summarize this"),
             # return the most recently inserted documents so the LLM has context.
             if not results:
-                cursor.execute("""
-                    SELECT content, metadata
-                    FROM documents
-                    ORDER BY id DESC
-                    LIMIT ?
-                """, (k,))
+                if conversation_id is not None:
+                    cursor.execute("""
+                        SELECT content, metadata
+                        FROM documents
+                        WHERE json_extract(metadata, '$.conversation_id') = ?
+                        ORDER BY id DESC
+                        LIMIT ?
+                    """, (conversation_id, k))
+                else:
+                    cursor.execute("""
+                        SELECT content, metadata
+                        FROM documents
+                        ORDER BY id DESC
+                        LIMIT ?
+                    """, (k,))
                 results = cursor.fetchall()
             
             docs = []
@@ -136,7 +238,7 @@ def search_documents(query: str, k: int = 5):
         print(f"Search error: {e}")
         return []
 
-def delete_document_chunks(filename: str) -> int:
+def delete_document_chunks(filename: str, conversation_id: int = None) -> int:
     """
     Deletes all chunks associated with a specific filename from the SQLite database.
     """
@@ -152,6 +254,12 @@ def delete_document_chunks(filename: str) -> int:
             try:
                 meta = json.loads(row['metadata']) if row['metadata'] else {}
                 source = meta.get("source", "")
+                doc_conv_id = meta.get("conversation_id")
+                
+                # If conversation_id is provided, only delete chunks for that conversation
+                if conversation_id is not None and doc_conv_id != conversation_id:
+                    continue
+                    
                 if os.path.basename(source) == filename or source == filename:
                     ids_to_delete.append(row['id'])
             except Exception:
@@ -163,3 +271,45 @@ def delete_document_chunks(filename: str) -> int:
             conn.commit()
             return len(ids_to_delete)
         return 0
+
+def delete_all_documents(conversation_id: int = None):
+    """
+    Deletes all records from the documents table, keeping conversations intact.
+    If conversation_id is provided, only deletes documents for that session.
+    """
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if conversation_id is not None:
+            # Requires querying to find IDs because json_extract might not be indexed for DELETE
+            cursor.execute("SELECT id FROM documents WHERE json_extract(metadata, '$.conversation_id') = ?", (conversation_id,))
+            rows = cursor.fetchall()
+            ids_to_delete = [row['id'] for row in rows]
+            if ids_to_delete:
+                placeholders = ",".join("?" for _ in ids_to_delete)
+                cursor.execute(f"DELETE FROM documents WHERE id IN ({placeholders})", ids_to_delete)
+        else:
+            cursor.execute("DELETE FROM documents")
+        conn.commit()
+
+def get_files_for_conversation(conversation_id: int) -> list:
+    """
+    Returns a list of distinct filenames active for a specific conversation.
+    """
+    import os
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT metadata FROM documents WHERE json_extract(metadata, '$.conversation_id') = ?", (conversation_id,))
+        rows = cursor.fetchall()
+        
+        files = set()
+        for row in rows:
+            try:
+                meta = json.loads(row['metadata']) if row['metadata'] else {}
+                source = meta.get("source", "")
+                if source:
+                    files.add(os.path.basename(source))
+            except Exception:
+                pass
+        return list(files)

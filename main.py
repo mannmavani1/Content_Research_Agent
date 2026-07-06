@@ -1,7 +1,7 @@
 import uvicorn
 import os
 import sys
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -51,9 +51,53 @@ app.include_router(chat_router.router)
 # --- Exception Handlers ---
 add_exception_handlers(app)
 
-# --- Frontend Serving ---
+# --- Frontend serving and Storage ---
 # Mount the "frontend" directory to serve static assets (JS, CSS, Images).
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
+# Mount the "storage" directory to serve uploaded audio/video and extracted keyframes.
+# Serve storage files with fuzzy matching to handle client/LLM emoji or metadata mismatches
+@app.get("/storage/{path:path}")
+async def serve_storage_file(path: str):
+    """
+    Serves files from the storage directory.
+    If the exact filename is not found (e.g., due to emoji mismatches or 
+    character set translations), attempts a fuzzy match based on normalized alphanumeric parts.
+    """
+    # 1. Resolve to absolute path to prevent directory traversal attacks (Path Traversal Vulnerability check)
+    safe_storage_dir = os.path.abspath(settings.STORAGE_DIR)
+    resolved_path = os.path.abspath(os.path.join(safe_storage_dir, path))
+    
+    # Enforce directory boundary check to prevent partial matching bypasses
+    if not resolved_path.startswith(safe_storage_dir + os.sep) and resolved_path != safe_storage_dir:
+        raise HTTPException(status_code=403, detail="Access denied")
+        
+    # If the file exists, serve it directly
+    if os.path.exists(resolved_path) and os.path.isfile(resolved_path):
+        return FileResponse(resolved_path)
+        
+    # If the exact path is not found, do a recursive fuzzy search inside the entire storage directory
+    import re
+    
+    def normalize(s):
+        return re.sub(r'[^a-zA-Z0-9_]', '', s).lower()
+        
+    base_name = os.path.basename(resolved_path)
+    norm_base = normalize(base_name)
+    
+    try:
+        # Walk through the entire storage directory
+        for root, dirs, files in os.walk(safe_storage_dir):
+            for f in files:
+                if normalize(f) == norm_base:
+                    matched_path = os.path.join(root, f)
+                    if os.path.isfile(matched_path):
+                        # Ensure safety check on matched file path
+                        if os.path.abspath(matched_path).startswith(safe_storage_dir + os.sep):
+                            return FileResponse(matched_path)
+    except Exception as e:
+        pass
+        
+    raise HTTPException(status_code=404, detail="File not found")
 
 @app.get("/")
 async def home():

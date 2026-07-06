@@ -30,3 +30,5 @@ class AgentState(TypedDict):
     documents: List[str]
 
     generation: str
+    
+    conversation_id: int

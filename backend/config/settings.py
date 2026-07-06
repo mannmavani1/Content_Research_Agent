@@ -26,7 +26,7 @@ class Settings:
     UPLOAD_DIR = os.path.join(STORAGE_DIR, "uploads")
     LOCAL_DB_DIR = os.path.join(STORAGE_DIR, "local_db")
     
-    LLM_MODEL: str = "openai/gpt-oss-120b"
+    LLM_MODEL: str = "llama-3.3-70b-versatile"
     RETRIEVAL_STRATEGY: str = "vectorless"
     LOCAL_DB_PATH: str = os.path.join(LOCAL_DB_DIR, "documents.db")
 
