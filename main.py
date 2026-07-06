@@ -65,9 +65,12 @@ async def serve_storage_file(path: str):
     If the exact filename is not found (e.g., due to emoji mismatches or 
     character set translations), attempts a fuzzy match based on normalized alphanumeric parts.
     """
+    import urllib.parse
+    unquoted_path = urllib.parse.unquote(path)
+
     # 1. Resolve to absolute path to prevent directory traversal attacks (Path Traversal Vulnerability check)
     safe_storage_dir = os.path.abspath(settings.STORAGE_DIR)
-    resolved_path = os.path.abspath(os.path.join(safe_storage_dir, path))
+    resolved_path = os.path.abspath(os.path.join(safe_storage_dir, unquoted_path))
     
     # Enforce directory boundary check to prevent partial matching bypasses
     if not resolved_path.startswith(safe_storage_dir + os.sep) and resolved_path != safe_storage_dir:

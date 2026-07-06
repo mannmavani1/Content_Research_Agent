@@ -8,6 +8,7 @@ from backend.schemas.api_models import PasteRequest, StandardResponse
 from backend.utils.responses import success_response
 from backend.services.ingestion import process_document, reset_database
 from backend.utils.dependencies import get_current_user
+from backend.database.database import verify_conversation_owner
 
 router = APIRouter(
     prefix="/ingestion", 
@@ -15,25 +16,26 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)]
 )
 
+def get_user_id(current_user: dict) -> str:
+    """Helper to extract unique user identifier from JWT payload."""
+    user_id = current_user.get("id") or current_user.get("email")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User identity could not be established.")
+    return str(user_id)
+
 @router.post("/upload", response_model=StandardResponse)
-async def upload_file(file: UploadFile = File(...), conversation_id: Optional[int] = Form(None)):
+async def upload_file(
+    file: UploadFile = File(...), 
+    conversation_id: Optional[int] = Form(None),
+    current_user: dict = Depends(get_current_user)
+):
     """
     Handles file uploads and triggers the indexing process.
-
-    This endpoint:
-    1. Saves the uploaded file physically to the configured `UPLOAD_DIR`.
-    2. Invokes the `process_document` service to chunk and embed the content.
-    3. Returns the status and number of chunks created.
-
-    Args:
-        file (UploadFile): The binary file object sent via multipart/form-data.
-
-    Returns:
-        IngestionResponse: structured response containing status, filename, and chunk count.
-
-    Raises:
-        HTTPException: 500 status if file saving or processing fails.
     """
+    user_id = get_user_id(current_user)
+    if conversation_id and not verify_conversation_owner(conversation_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied to this conversation.")
+
     file_path = os.path.join(settings.UPLOAD_DIR, file.filename)
     
     with open(file_path, "wb") as buffer:
@@ -54,27 +56,18 @@ async def upload_file(file: UploadFile = File(...), conversation_id: Optional[in
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/paste", response_model=StandardResponse)
-async def paste_content(request: PasteRequest):
+async def paste_content(request: PasteRequest, current_user: dict = Depends(get_current_user)):
     """
     Accepts raw text input and treats it as a file for indexing.
-
-    Useful for "Paste Text" features in the UI. It creates a temporary .txt file 
-    timestamped to prevent collisions, then processes it exactly like an uploaded file.
-
-    Args:
-        request (PasteRequest): JSON body containing 'text' and an optional 'filename'.
-
-    Returns:
-        IngestionResponse: structured response containing status and chunk count.
-
-    Raises:
-        HTTPException: 400 if text is empty, 500 if file writing or processing fails.
     """
+    user_id = get_user_id(current_user)
+    if request.conversation_id and not verify_conversation_owner(request.conversation_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied to this conversation.")
+
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Content cannot be empty")
 
     timestamp = int(time.time())
-    # Ensure a default name if none provided
     base_name = request.filename if request.filename else "pasted_content"
     clean_filename = f"{base_name}_{timestamp}.txt"
     file_path = os.path.join(settings.UPLOAD_DIR, clean_filename)
@@ -97,10 +90,14 @@ async def paste_content(request: PasteRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/reset")
-def reset_database_router(conversation_id: Optional[int] = None):
+def reset_database_router(conversation_id: Optional[int] = None, current_user: dict = Depends(get_current_user)):
     """
     Clears the entire local database or only for a specific conversation.
     """
+    user_id = get_user_id(current_user)
+    if conversation_id and not verify_conversation_owner(conversation_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied to this conversation.")
+
     try:
         reset_database(conversation_id)
         return success_response(message="Database reset complete")
@@ -108,10 +105,14 @@ def reset_database_router(conversation_id: Optional[int] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/file", response_model=StandardResponse)
-async def delete_file(filename: str, conversation_id: Optional[int] = None):
+async def delete_file(filename: str, conversation_id: Optional[int] = None, current_user: dict = Depends(get_current_user)):
     """
     Deletes a specific file physically and removes its chunks from the SQLite database.
     """
+    user_id = get_user_id(current_user)
+    if conversation_id and not verify_conversation_owner(conversation_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied to this conversation.")
+
     if not filename.strip():
         raise HTTPException(status_code=400, detail="Filename cannot be empty")
     
@@ -144,10 +145,14 @@ async def delete_file(filename: str, conversation_id: Optional[int] = None):
     )
 
 @router.get("/files/{conversation_id}", response_model=StandardResponse)
-async def get_files(conversation_id: int = Path(...)):
+async def get_files(conversation_id: int = Path(...), current_user: dict = Depends(get_current_user)):
     """
     Fetches the list of filenames active in the specified conversation.
     """
+    user_id = get_user_id(current_user)
+    if not verify_conversation_owner(conversation_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied to this conversation.")
+
     try:
         from backend.database.database import get_files_for_conversation
         files = get_files_for_conversation(conversation_id)

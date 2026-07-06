@@ -60,10 +60,17 @@ def init_db():
             CREATE TABLE IF NOT EXISTS conversations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
+                user_id TEXT NOT NULL DEFAULT '',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # Ensure user_id column exists for existing DBs
+        cursor.execute("PRAGMA table_info(conversations)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if "user_id" not in columns:
+            cursor.execute("ALTER TABLE conversations ADD COLUMN user_id TEXT NOT NULL DEFAULT ''")
         
         # Table for storing messages within a conversation
         cursor.execute("""
@@ -79,38 +86,69 @@ def init_db():
         
         conn.commit()
 
-def create_conversation(title: str = "New Chat") -> dict:
-    """Creates a new conversation session."""
+def create_conversation(title: str = "New Chat", user_id: str = "") -> dict:
+    """Creates a new conversation session for a specific user."""
     init_db()
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO conversations (title) VALUES (?)", (title,))
+        cursor.execute("INSERT INTO conversations (title, user_id) VALUES (?, ?)", (title, user_id))
         conn.commit()
-        return {"id": cursor.lastrowid, "title": title}
+        return {"id": cursor.lastrowid, "title": title, "user_id": user_id}
 
-def get_conversations() -> list:
-    """Returns a list of all conversations ordered by recent activity."""
+def get_conversations(user_id: str = None) -> list:
+    """Returns a list of conversations for a user ordered by recent activity."""
     init_db()
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC")
+        if user_id is not None:
+            cursor.execute(
+                "SELECT id, title, user_id, created_at, updated_at FROM conversations WHERE user_id = ? ORDER BY updated_at DESC",
+                (user_id,)
+            )
+        else:
+            cursor.execute("SELECT id, title, user_id, created_at, updated_at FROM conversations ORDER BY updated_at DESC")
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
-def delete_conversation(conversation_id: int):
-    """Deletes a conversation and all its messages via ON DELETE CASCADE."""
+def get_conversation(conversation_id: int) -> dict | None:
+    """Returns details of a specific conversation session."""
     init_db()
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+        cursor.execute("SELECT id, title, user_id, created_at, updated_at FROM conversations WHERE id = ?", (conversation_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def verify_conversation_owner(conversation_id: int, user_id: str) -> bool:
+    """Verifies whether a conversation session belongs to the given user ID."""
+    conv = get_conversation(conversation_id)
+    if not conv:
+        return False
+    # If conversation has an assigned user_id, it must match
+    if conv["user_id"] and conv["user_id"] != user_id:
+        return False
+    return True
+
+def delete_conversation(conversation_id: int, user_id: str = None):
+    """Deletes a conversation and all its messages via ON DELETE CASCADE if authorized."""
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if user_id is not None:
+            cursor.execute("DELETE FROM conversations WHERE id = ? AND user_id = ?", (conversation_id, user_id))
+        else:
+            cursor.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
         conn.commit()
 
-def rename_conversation(conversation_id: int, new_title: str):
-    """Updates the title of a conversation."""
+def rename_conversation(conversation_id: int, new_title: str, user_id: str = None):
+    """Updates the title of a conversation if authorized."""
     init_db()
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("UPDATE conversations SET title = ? WHERE id = ?", (new_title, conversation_id))
+        if user_id is not None:
+            cursor.execute("UPDATE conversations SET title = ? WHERE id = ? AND user_id = ?", (new_title, conversation_id, user_id))
+        else:
+            cursor.execute("UPDATE conversations SET title = ? WHERE id = ?", (new_title, conversation_id))
         conn.commit()
 
 def add_message(conversation_id: int, role: str, content: str):
@@ -128,9 +166,11 @@ def add_message(conversation_id: int, role: str, content: str):
         )
         conn.commit()
 
-def get_messages(conversation_id: int) -> list:
-    """Returns all messages for a specific conversation in chronological order."""
+def get_messages(conversation_id: int, user_id: str = None) -> list:
+    """Returns all messages for a specific conversation in chronological order if owned by user."""
     init_db()
+    if user_id is not None and not verify_conversation_owner(conversation_id, user_id):
+        return []
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(

@@ -115,6 +115,46 @@
         .prose blockquote { border-left: 4px solid #7c3aed; padding-left: 1.25em; color: #475569; font-style: italic; background: rgba(124, 58, 237, 0.04); py: 2px; }
         .dark .prose blockquote { border-left-color: #8b5cf6; color: #94a3b8; background: rgba(139, 92, 246, 0.05); }
 
+        /* Code Block & Responsive Wrapping Fix */
+        .prose pre {
+            background: #090d16 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 14px !important;
+            padding: 1rem 1.25rem !important;
+            margin: 1.2em 0 !important;
+            max-width: 100% !important;
+            overflow-x: auto !important;
+            white-space: pre-wrap !important;
+            word-break: break-word !important;
+            word-wrap: break-word !important;
+            box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.3) !important;
+        }
+
+        .prose code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+            font-size: 12px !important;
+            line-height: 1.6 !important;
+            color: #38bdf8 !important;
+            background: rgba(15, 23, 42, 0.6);
+            padding: 2px 6px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            white-space: pre-wrap !important;
+            word-break: break-word !important;
+            word-wrap: break-word !important;
+        }
+
+        .prose pre code {
+            color: #e2e8f0 !important;
+            background: transparent !important;
+            padding: 0 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            white-space: pre-wrap !important;
+            word-break: break-word !important;
+            word-wrap: break-word !important;
+        }
+
         /* Animations */
         @keyframes blob-bounce {
             0%, 100% { transform: translateY(0) scale(1); }
@@ -162,18 +202,175 @@
     </style>
 </head>
 <body class="bg-slate-50 dark:bg-slateDark-950 text-slate-800 dark:text-gray-200 h-screen flex antialiased overflow-hidden font-sans relative transition-colors duration-300">
-    <!-- Login Overlay -->
-    <div id="login-overlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-50 dark:bg-slateDark-950 transition-opacity duration-300">
-        <div class="glass-card p-10 rounded-3xl max-w-md w-full text-center flex flex-col items-center">
-            <div class="w-16 h-16 bg-brand-500/10 text-brand-600 rounded-2xl flex items-center justify-center mb-6">
-                <span class="material-symbols-rounded text-3xl">lock</span>
+    <!-- Login Overlay - Premium Split Layout -->
+    <div id="login-overlay" class="fixed inset-0 z-50 flex" style="font-family: 'Plus Jakarta Sans', sans-serif;">
+        
+        <!-- LEFT PANEL: High-Tech Branding & Live Interactive Preview -->
+        <div class="hidden lg:flex flex-col justify-between w-[55%] relative overflow-hidden" style="background: radial-gradient(circle at 20% 20%, #1e1b4b 0%, #0f172a 50%, #020617 100%);">
+            
+            <!-- Animated background orbs & mesh -->
+            <div class="absolute inset-0 pointer-events-none overflow-hidden">
+                <div style="position:absolute;top:-10%;left:-10%;width:70%;height:70%;background:radial-gradient(circle,rgba(139,92,246,0.28) 0%,transparent 70%);border-radius:50%;animation:blob 8s ease-in-out infinite alternate;filter:blur(40px);"></div>
+                <div style="position:absolute;bottom:-15%;right:-10%;width:60%;height:60%;background:radial-gradient(circle,rgba(79,70,229,0.25) 0%,transparent 70%);border-radius:50%;animation:blob 10s ease-in-out 2s infinite alternate-reverse;filter:blur(50px);"></div>
+                <div style="position:absolute;top:45%;left:25%;width:40%;height:40%;background:radial-gradient(circle,rgba(217,70,239,0.15) 0%,transparent 70%);border-radius:50%;animation:blob 7s ease-in-out 1s infinite alternate;filter:blur(30px);"></div>
+                <!-- Subtle grid pattern -->
+                <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:40px 40px;"></div>
             </div>
-            <h1 class="text-2xl font-display font-bold text-slate-900 dark:text-white mb-2">Welcome Back</h1>
-            <p class="text-slate-500 dark:text-slate-400 mb-8">Please sign in to access your research workspace.</p>
-            <a href="/auth/login" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-medium py-3 px-4 rounded-xl shadow-lg shadow-brand-500/25 transition-all flex items-center justify-center gap-2">
-                Sign In with WorkOS
-                <span class="material-symbols-rounded text-xl">arrow_forward</span>
-            </a>
+
+            <!-- Top Header & Pill Badge -->
+            <div class="relative z-10 p-10 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div style="width:42px;height:42px;background:linear-gradient(135deg,#6366f1,#8b5cf6,#d946ef);border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 24px rgba(139,92,246,0.5);">
+                        <span class="material-symbols-rounded text-white text-2xl">explore</span>
+                    </div>
+                    <div>
+                        <span style="font-family:'Outfit',sans-serif;font-weight:800;font-size:19px;color:white;letter-spacing:-0.4px;" class="block leading-tight">Content Research Agent</span>
+                        <span style="font-size:11px;color:rgba(167,139,250,0.9);font-weight:600;letter-spacing:0.5px;" class="uppercase">Enterprise Intelligence</span>
+                    </div>
+                </div>
+
+                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md text-xs font-medium text-purple-200 shadow-sm">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>AI Engine Ready</span>
+                </div>
+            </div>
+
+            <!-- Center Content: Hero & Real Capabilities -->
+            <div class="relative z-10 px-12 py-6 my-auto max-w-xl">
+                <!-- Glowing Tag -->
+                <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold tracking-wide uppercase mb-6 backdrop-blur-sm shadow-sm">
+                    <span class="material-symbols-rounded text-sm text-purple-400">auto_awesome</span>
+                    AI-Powered Research Agent
+                </div>
+
+                <h1 style="font-family:'Outfit',sans-serif;font-size:44px;font-weight:800;color:white;line-height:1.15;letter-spacing:-1px;margin-bottom:18px;">
+                    Research smarter,<br>
+                    <span style="background:linear-gradient(90deg,#a78bfa,#818cf8,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">synthesize faster.</span>
+                </h1>
+                <p style="color:rgba(203,213,225,0.75);font-size:15px;line-height:1.7;margin-bottom:32px;max-width:440px;">
+                    Your intelligent research companion. Analyze complex documents, extract key insights, and compare sources seamlessly.
+                </p>
+
+                <!-- Core Capability List -->
+                <div class="space-y-4">
+                    <div class="flex items-start gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md transition-all hover:bg-white/10 hover:border-purple-500/30">
+                        <div class="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center flex-shrink-0 text-purple-400">
+                            <span class="material-symbols-rounded text-xl">description</span>
+                        </div>
+                        <div>
+                            <h3 class="text-white text-sm font-semibold mb-0.5">Multi-Format Document Indexing</h3>
+                            <p class="text-slate-400 text-xs leading-relaxed">Upload and index PDFs, Word documents, text files, spreadsheet data, and audio/video transcripts.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md transition-all hover:bg-white/10 hover:border-indigo-500/30">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center flex-shrink-0 text-indigo-400">
+                            <span class="material-symbols-rounded text-xl">psychology</span>
+                        </div>
+                        <div>
+                            <h3 class="text-white text-sm font-semibold mb-0.5">Context-Aware AI Synthesis</h3>
+                            <p class="text-slate-400 text-xs leading-relaxed">Ask questions, extract executive summaries, and generate structured insights grounded in your actual files.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md transition-all hover:bg-white/10 hover:border-pink-500/30">
+                        <div class="w-10 h-10 rounded-xl bg-pink-500/15 border border-pink-500/30 flex items-center justify-center flex-shrink-0 text-pink-400">
+                            <span class="material-symbols-rounded text-xl">compare_arrows</span>
+                        </div>
+                        <div>
+                            <h3 class="text-white text-sm font-semibold mb-0.5">Multi-Source Comparison</h3>
+                            <p class="text-slate-400 text-xs leading-relaxed">Cross-examine multiple documents simultaneously to identify correlations, discrepancies, and key takeaways.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Compliance Footer -->
+            <div class="relative z-10 p-10 pt-4 flex items-center justify-between border-t border-white/5">
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                    <span class="material-symbols-rounded text-sm text-emerald-400">verified</span>
+                    <span>Enterprise Security Certified</span>
+                </div>
+                <div class="flex items-center gap-4 text-[11px] text-slate-500">
+                    <span>256-Bit Encryption</span>
+                    <span>•</span>
+                    <span>SOC 2 Compliant</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: Sleek Glass Login Card -->
+        <div class="flex-1 flex items-center justify-center p-6 lg:p-12 bg-slate-50 dark:bg-slate-950 relative">
+            
+            <!-- Subtle background accent gradients for right panel -->
+            <div class="absolute inset-0 pointer-events-none overflow-hidden">
+                <div class="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-500/5 dark:bg-purple-500/10 rounded-full blur-3xl"></div>
+            </div>
+
+            <div class="w-full max-w-[420px] relative z-10">
+                
+                <!-- Mobile logo (only on small screens) -->
+                <div class="lg:hidden flex items-center gap-3 mb-8 justify-center">
+                    <div style="width:40px;height:40px;background:linear-gradient(135deg,#6366f1,#8b5cf6,#d946ef);border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(139,92,246,0.3);">
+                        <span class="material-symbols-rounded text-white" style="font-size:20px;">explore</span>
+                    </div>
+                    <span style="font-family:'Outfit',sans-serif;font-weight:800;font-size:18px;color:#0f172a;" class="dark:text-white">Content Research Agent</span>
+                </div>
+
+                <!-- Main Login Card Container -->
+                <div class="bg-white dark:bg-slate-900 p-8 sm:p-10 rounded-3xl shadow-xl border border-slate-200/80 dark:border-white/10 backdrop-blur-xl">
+                    
+                    <!-- Lock & Spark Icon Header -->
+                    <div class="flex items-center justify-between mb-6">
+                        <div style="width:52px;height:52px;background:linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.12));border:1px solid rgba(139,92,246,0.25);border-radius:16px;display:flex;align-items:center;justify-content:center;" class="shadow-sm">
+                            <span class="material-symbols-rounded" style="font-size:26px;color:#8b5cf6;">lock</span>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Secure Portal
+                        </span>
+                    </div>
+
+                    <!-- Heading -->
+                    <h2 style="font-family:'Outfit',sans-serif;font-size:28px;font-weight:800;color:#0f172a;letter-spacing:-0.5px;margin-bottom:8px;" class="dark:text-white">
+                        Welcome back
+                    </h2>
+                    <p style="color:#64748b;font-size:14px;margin-bottom:32px;line-height:1.6;" class="dark:text-slate-400">
+                        Sign in to continue to your research workspace. Your session is protected with end-to-end encryption.
+                    </p>
+
+                    <!-- Sign In Button -->
+                    <a href="/auth/login" 
+                       style="display:flex;align-items:center;justify-content:center;gap:12px;width:100%;padding:15px 22px;background:linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);color:white;font-weight:600;font-size:15px;border-radius:16px;text-decoration:none;box-shadow:0 10px 30px -5px rgba(139,92,246,0.45);transition:all 0.25s cubic-bezier(0.4, 0, 0.2, 1);letter-spacing:-0.2px;" 
+                       onmouseover="this.style.transform='translateY(-2px) scale(1.01)';this.style.boxShadow='0 16px 36px -4px rgba(139,92,246,0.6)';" 
+                       onmouseout="this.style.transform='none';this.style.boxShadow='0 10px 30px -5px rgba(139,92,246,0.45)';">
+                        <span class="material-symbols-rounded" style="font-size:20px;">login</span>
+                        <span>Sign In to Workspace</span>
+                        <span class="material-symbols-rounded" style="font-size:18px;margin-left:auto;">arrow_forward</span>
+                    </a>
+
+                    <!-- Security Info Grid -->
+                    <div class="mt-8 pt-6 border-t border-slate-100 dark:border-white/10 space-y-3">
+                        <div class="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
+                            <div class="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-800/40 flex items-center justify-center flex-shrink-0 text-indigo-600 dark:text-indigo-400">
+                                <span class="material-symbols-rounded text-sm">shield</span>
+                            </div>
+                            <span>Protected by Enterprise Security Standards</span>
+                        </div>
+                        <div class="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
+                            <div class="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-800/40 flex items-center justify-center flex-shrink-0 text-purple-600 dark:text-purple-400">
+                                <span class="material-symbols-rounded text-sm">fingerprint</span>
+                            </div>
+                            <span>Single Sign-On (SSO) & Multi-Factor Auth</span>
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <p style="color:#94a3b8;font-size:11px;text-align:center;margin-top:28px;line-height:1.6;" class="dark:text-slate-500">
+                        By continuing, you agree to our Terms of Service & Privacy Policy.
+                    </p>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -308,9 +505,6 @@
                 <!-- User Profile & Logout -->
                 <div id="user-profile" class="hidden flex items-center gap-2">
                     <span id="user-name" class="text-xs font-semibold text-slate-700 dark:text-slate-300"></span>
-                    <button onclick="switchAccount()" class="w-8 h-8 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 text-brand-600 dark:text-brand-400 transition-all flex items-center justify-center" title="Switch Account">
-                        <span class="material-symbols-rounded text-lg">switch_account</span>
-                    </button>
                     <button onclick="logout()" class="w-8 h-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-all flex items-center justify-center" title="Logout">
                         <span class="material-symbols-rounded text-lg">logout</span>
                     </button>
@@ -471,6 +665,18 @@
             }
         }
     </script>
+
+    <!-- Image Lightbox Modal -->
+    <div id="image-modal" onclick="closeImageModal()" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex flex-col items-center justify-center p-4 transition-all duration-300 opacity-0 cursor-pointer">
+        <div onclick="event.stopPropagation()" class="relative max-w-5xl w-full flex flex-col items-center cursor-default">
+            <button onclick="closeImageModal()" class="absolute -top-12 right-0 text-white/70 hover:text-white p-2 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md transition-all shadow-md">
+                <span class="material-symbols-rounded block text-xl">close</span>
+            </button>
+            <img id="image-modal-img" src="" alt="Keyframe image" class="max-h-[82vh] max-w-full rounded-2xl shadow-2xl border border-white/10 object-contain bg-slate-900">
+            <p id="image-modal-caption" class="text-slate-200 text-xs font-semibold mt-3 text-center px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/10 shadow-sm"></p>
+        </div>
+    </div>
+
     <script src="/static/script.js"></script>
 </body>
 </html>

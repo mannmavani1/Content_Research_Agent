@@ -19,6 +19,11 @@ def get_pipelines():
         _vqa = pipeline("visual-question-answering", model="dandelin/vilt-b32-finetuned-vqa")
     return _captioner, _vqa
 
+def get_captioner():
+    captioner, _ = get_pipelines()
+    return captioner
+
+
 def process_image_file(file_path: str) -> list:
     """
     Ingests an image, extracts metadata, generates a visual caption locally,

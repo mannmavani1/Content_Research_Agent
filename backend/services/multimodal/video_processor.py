@@ -54,7 +54,8 @@ def process_video_file(file_path: str) -> list:
             chunk["metadata"]["filename"] = filename
             chunk["metadata"]["media_type"] = "video"
             chunk["content"] = chunk["content"].replace(f"Audio Transcription ({base_name_no_ext}_mono.wav)", f"Video Transcription ({filename})")
-            chunks.extend(audio_chunks)
+        
+        chunks.extend(audio_chunks)
             
     except Exception as e:
         print(f"Failed to extract/transcribe audio track for video {filename}: {e}")
@@ -101,7 +102,9 @@ def process_video_file(file_path: str) -> list:
                 caption = "Visual scene."
                 
             # Create a visual frame chunk
-            relative_frame_url = f"/storage/extracted_frames/{os.path.basename(frame_path)}"
+            from urllib.parse import quote
+            relative_frame_url = f"/storage/extracted_frames/{quote(os.path.basename(frame_path))}"
+
             
             content_text = (
                 f"Video Visual Frame ({filename}) at [{timestamp_str}]:\n"

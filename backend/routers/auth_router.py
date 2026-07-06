@@ -48,23 +48,6 @@ async def login():
     )
     return RedirectResponse(url=authorization_url)
 
-@router.get("/switch")
-async def switch_account(email: str = None):
-    """
-    Forces a fresh WorkOS login screen for a different account.
-    Accepts an optional email hint to pre-fill the login form.
-    """
-    if not settings.WORKOS_CLIENT_ID or not settings.WORKOS_API_KEY:
-        raise HTTPException(status_code=500, detail="WorkOS configuration is missing.")
-
-    authorization_url = workos_client.user_management.get_authorization_url(
-        redirect_uri=settings.WORKOS_REDIRECT_URI,
-        provider="authkit",
-        screen_hint="sign-in",
-        login_hint=email,  # Pre-fills the email field if provided
-    )
-    return RedirectResponse(url=authorization_url)
-
 @router.get("/callback")
 async def callback(code: str):
     """

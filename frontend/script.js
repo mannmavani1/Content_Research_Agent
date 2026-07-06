@@ -1,4 +1,4 @@
-const API_URL = ""; 
+const API_URL = "";
 let currentMode = "chat";
 let currentConversationId = null;
 
@@ -7,7 +7,7 @@ let currentConversationId = null;
 // ==========================================
 window.addEventListener('DOMContentLoaded', async () => {
     console.log("Page loaded, fetching session data...");
-    
+
     if (window.Notification && Notification.permission === "default") {
         Notification.requestPermission();
     }
@@ -20,7 +20,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('login-overlay').classList.remove('hidden');
             return; // Stop initialization
         }
-        
+
         // Authenticated! Show user profile and continue
         const userData = await authResponse.json();
         const userNameEl = document.getElementById('user-name');
@@ -48,33 +48,33 @@ async function loadConversations() {
         const list = document.getElementById("conversation-list");
         if (!list) return;
         list.innerHTML = "";
-        
+
         if (data.data && data.data.length > 0) {
             data.data.forEach(conv => {
                 const wrapper = document.createElement("div");
                 wrapper.className = `group flex items-center justify-between p-2 rounded-lg transition-all duration-200 cursor-pointer ${currentConversationId === conv.id ? 'bg-brand-50 border border-brand-200 dark:bg-brand-900/20 dark:border-brand-500/30 shadow-sm' : 'hover:bg-gray-50 dark:hover:bg-white/5 border border-transparent'}`;
-                
+
                 const btn = document.createElement("button");
                 btn.className = `flex-1 text-left text-xs font-bold tracking-wider truncate mr-2 ${currentConversationId === conv.id ? 'text-brand-600 dark:text-brand-400' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}`;
                 btn.textContent = conv.title;
                 btn.onclick = () => switchConversation(conv.id);
-                
+
                 const actions = document.createElement("div");
                 actions.className = "hidden group-hover:flex items-center gap-1 flex-shrink-0";
-                
+
                 const renameBtn = document.createElement("button");
                 renameBtn.className = "text-gray-400 hover:text-brand-500 transition-colors p-1";
                 renameBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">edit</span>';
                 renameBtn.onclick = (e) => { e.stopPropagation(); renameConversation(conv.id, conv.title); };
-                
+
                 const deleteBtn = document.createElement("button");
                 deleteBtn.className = "text-gray-400 hover:text-rose-500 transition-colors p-1";
                 deleteBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">delete</span>';
                 deleteBtn.onclick = (e) => { e.stopPropagation(); deleteConversation(conv.id); };
-                
+
                 actions.appendChild(renameBtn);
                 actions.appendChild(deleteBtn);
-                
+
                 wrapper.appendChild(btn);
                 wrapper.appendChild(actions);
                 list.appendChild(wrapper);
@@ -133,7 +133,7 @@ async function deleteConversation(id) {
         try {
             await fetch(`${API_URL}/tools/conversations/${id}`, { method: "DELETE" });
             showToast("Chat deleted", "info");
-            
+
             if (currentConversationId === id) {
                 currentConversationId = null;
                 await loadConversations();
@@ -166,17 +166,17 @@ async function createNewConversation() {
 async function switchConversation(id) {
     currentConversationId = id;
     const history = document.getElementById("chat-history");
-    history.innerHTML = ""; 
-    
-    
+    history.innerHTML = "";
+
+
     // Enable inputs since a chat is active
     updateInputsState(true);
-    
+
     const panel = document.getElementById("chat-input-panel");
     if (panel) panel.classList.remove("hidden");
-    
+
     await loadConversationsWithoutSwitching();
-    
+
     try {
         const response = await fetch(`${API_URL}/tools/conversations/${id}`);
         const data = await response.json();
@@ -188,21 +188,21 @@ async function switchConversation(id) {
     } catch (e) {
         console.error(e);
     }
-    
+
     // Fetch and populate active files for this conversation
     await fetchActiveFiles(id);
 }
 
 async function fetchActiveFiles(conversationId) {
     if (!conversationId) return;
-    
+
     const list = document.getElementById("file-list");
     const title = document.getElementById("file-list-title");
-    
+
     // Clear current list
     list.innerHTML = "";
     title.classList.add("hidden");
-    
+
     try {
         const response = await fetch(`${API_URL}/ingestion/files/${conversationId}`);
         const data = await response.json();
@@ -219,7 +219,7 @@ async function fetchActiveFiles(conversationId) {
 
 function showStartChatScreen() {
     currentConversationId = null;
-    
+
     const history = document.getElementById("chat-history");
     history.innerHTML = `
         <div class="flex flex-col items-center justify-center h-full text-center max-w-2xl mx-auto space-y-6" id="welcome-screen">
@@ -237,15 +237,15 @@ function showStartChatScreen() {
             </button>
         </div>
     `;
-    
+
     const fileTitle = document.getElementById("file-list-title");
     if (fileTitle) fileTitle.classList.add("hidden");
     const fileList = document.getElementById("file-list");
     if (fileList) fileList.innerHTML = "";
-    
+
     const panel = document.getElementById("chat-input-panel");
     if (panel) panel.classList.add("hidden");
-    
+
     updateInputsState(false);
 }
 
@@ -255,7 +255,7 @@ function updateInputsState(hasChat) {
     const dropZone = document.getElementById("drop-zone");
     const pasteArea = document.getElementById("paste-area");
     const pasteBtn = document.getElementById("paste-submit");
-    
+
     if (userInput) {
         userInput.disabled = !hasChat;
         if (!hasChat) {
@@ -272,7 +272,7 @@ function updateInputsState(hasChat) {
             sendBtn.classList.remove("opacity-50", "pointer-events-none");
         }
     }
-    
+
     if (dropZone) {
         if (!hasChat) {
             dropZone.classList.add("opacity-40", "pointer-events-none");
@@ -280,7 +280,7 @@ function updateInputsState(hasChat) {
             dropZone.classList.remove("opacity-40", "pointer-events-none");
         }
     }
-    
+
     if (pasteArea) {
         pasteArea.disabled = !hasChat;
         if (!hasChat) {
@@ -305,33 +305,33 @@ async function loadConversationsWithoutSwitching() {
         const list = document.getElementById("conversation-list");
         if (!list) return;
         list.innerHTML = "";
-        
+
         if (data.data) {
             data.data.forEach(conv => {
                 const wrapper = document.createElement("div");
                 wrapper.className = `group flex items-center justify-between p-2 rounded-lg transition-all duration-200 cursor-pointer ${currentConversationId === conv.id ? 'bg-brand-50 border border-brand-200 dark:bg-brand-900/20 dark:border-brand-500/30 shadow-sm' : 'hover:bg-gray-50 dark:hover:bg-white/5 border border-transparent'}`;
-                
+
                 const btn = document.createElement("button");
                 btn.className = `flex-1 text-left text-xs font-bold tracking-wider truncate mr-2 ${currentConversationId === conv.id ? 'text-brand-600 dark:text-brand-400' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}`;
                 btn.textContent = conv.title;
                 btn.onclick = () => switchConversation(conv.id);
-                
+
                 const actions = document.createElement("div");
                 actions.className = "hidden group-hover:flex items-center gap-1 flex-shrink-0";
-                
+
                 const renameBtn = document.createElement("button");
                 renameBtn.className = "text-gray-400 hover:text-brand-500 transition-colors p-1";
                 renameBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">edit</span>';
                 renameBtn.onclick = (e) => { e.stopPropagation(); renameConversation(conv.id, conv.title); };
-                
+
                 const deleteBtn = document.createElement("button");
                 deleteBtn.className = "text-gray-400 hover:text-rose-500 transition-colors p-1";
                 deleteBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">delete</span>';
                 deleteBtn.onclick = (e) => { e.stopPropagation(); deleteConversation(conv.id); };
-                
+
                 actions.appendChild(renameBtn);
                 actions.appendChild(deleteBtn);
-                
+
                 wrapper.appendChild(btn);
                 wrapper.appendChild(actions);
                 list.appendChild(wrapper);
@@ -347,7 +347,7 @@ async function loadConversationsWithoutSwitching() {
 function showToast(message, type = "info") {
     const container = document.getElementById("toast-container");
     const toast = document.createElement("div");
-    
+
     const colors = {
         success: "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20",
         error: "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20",
@@ -362,7 +362,7 @@ function showToast(message, type = "info") {
     `;
 
     container.appendChild(toast);
-    
+
     // Send Native Desktop Push Notification if the tab is hidden or minimized
     if (document.hidden && window.Notification && Notification.permission === "granted") {
         try {
@@ -377,7 +377,7 @@ function showToast(message, type = "info") {
 
     // Animate In
     requestAnimationFrame(() => toast.classList.remove("translate-x-full", "opacity-0"));
-    
+
     // Animate Out after 4s
     setTimeout(() => {
         toast.classList.add("translate-x-full", "opacity-0");
@@ -391,7 +391,7 @@ function showToast(message, type = "info") {
 function addFileCard(filename) {
     const list = document.getElementById("file-list");
     const title = document.getElementById("file-list-title");
-    
+
     title.classList.remove("hidden");
 
     const card = document.createElement("div");
@@ -418,13 +418,13 @@ function addFileCard(filename) {
 
 async function deleteFileWorkspace(event, filename, cardElement) {
     event.stopPropagation();
-    
+
     const result = await Swal.fire({
         title: 'Delete Document?',
         text: `Are you sure you want to remove ${filename} from your workspace knowledge base?`,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#ef4444', 
+        confirmButtonColor: '#ef4444',
         cancelButtonColor: '#1f2937',
         confirmButtonText: 'Delete',
         cancelButtonText: 'Cancel',
@@ -450,15 +450,15 @@ async function deleteFileWorkspace(event, filename, cardElement) {
                 method: "DELETE"
             });
             const data = await response.json();
-            
+
             if (response.ok && data.status === 200) {
                 showToast(data.message, "success");
-                
+
                 // Animate the card slide out and remove it
                 cardElement.classList.add("translate-x-full", "opacity-0");
                 setTimeout(() => {
                     cardElement.remove();
-                    
+
                     // Hide header list if empty
                     const list = document.getElementById("file-list");
                     const title = document.getElementById("file-list-title");
@@ -492,10 +492,10 @@ async function handleFileUpload(files) {
     try {
         const response = await fetch(`${API_URL}/ingestion/upload`, { method: "POST", body: formData });
         const data = await response.json();
-        
+
         if (response.ok && data.status === 200) {
             showToast(data.message, "success");
-            addFileCard(data.data.filename); 
+            addFileCard(data.data.filename);
         } else {
             throw new Error(data.message || "Failed to upload file");
         }
@@ -507,13 +507,13 @@ async function handleFileUpload(files) {
 async function handlePaste() {
     const text = document.getElementById("paste-area").value;
     if (!text.trim()) { showToast("Please enter some text", "error"); return; }
-    
+
     try {
         const bodyData = { text: text };
         if (currentConversationId) {
             bodyData.conversation_id = currentConversationId;
         }
-        
+
         const response = await fetch(`${API_URL}/ingestion/paste`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -523,7 +523,7 @@ async function handlePaste() {
         if (response.ok && data.status === 200) {
             showToast(data.message, "success");
             document.getElementById("paste-area").value = "";
-            addFileCard(data.data.filename); 
+            addFileCard(data.data.filename);
         } else {
             throw new Error(data.message || "Failed to process text");
         }
@@ -539,7 +539,7 @@ async function resetSession() {
         text: "This will remove all uploaded documents and chat history.",
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#ef4444', 
+        confirmButtonColor: '#ef4444',
         cancelButtonColor: '#1f2937',
         confirmButtonText: 'Yes, clear it',
         cancelButtonText: 'Cancel',
@@ -562,7 +562,7 @@ async function resetSession() {
             title: 'Cleaning up...',
             html: '<span class="text-xs text-gray-400">This may take a second</span>',
             didOpen: () => { Swal.showLoading() },
-            background: 'rgba(255, 255, 255, 0.9)', 
+            background: 'rgba(255, 255, 255, 0.9)',
             backdrop: true,
             allowOutsideClick: false,
             showConfirmButton: false,
@@ -577,12 +577,12 @@ async function resetSession() {
             const response = await fetch(url, { method: "POST" });
             const data = await response.json();
             if (!response.ok || data.status !== 200) throw new Error(data.message || "Could not reset session.");
-            
+
             // UI Cleanup
             document.getElementById("chat-history").innerHTML = "";
-            document.getElementById("file-list").innerHTML = ""; 
+            document.getElementById("file-list").innerHTML = "";
             document.getElementById("file-list-title").classList.add("hidden");
-            
+
             // Re-add welcome screen
             const history = document.getElementById("chat-history");
             history.innerHTML = `
@@ -594,7 +594,7 @@ async function resetSession() {
                     <p class="text-sm text-gray-500 max-w-md">Upload a document to unlock specialized tools like Summarization, Comparison, and Data Extraction.</p>
                 </div>
             `;
-            
+
             Swal.fire({
                 icon: 'success',
                 title: 'Workspace Cleared',
@@ -617,7 +617,7 @@ async function resetSession() {
 // ==========================================
 function setMode(mode) {
     currentMode = mode;
-    
+
     const activeClasses = ['active', 'bg-brand-600', 'bg-brand-500', 'text-white', 'shadow-md', 'shadow-lg', 'shadow-brand-500/25'];
     const inactiveClasses = ['text-slate-600', 'dark:text-slate-400', 'hover:text-slate-900', 'dark:hover:text-white'];
 
@@ -625,7 +625,7 @@ function setMode(mode) {
         btn.classList.remove(...activeClasses);
         btn.classList.add(...inactiveClasses);
     });
-    
+
     const activeBtn = document.querySelector(`.mode-btn[data-mode="${mode}"]`);
     if (activeBtn) {
         activeBtn.classList.remove(...inactiveClasses);
@@ -674,7 +674,7 @@ async function sendMessage() {
         });
         const data = await response.json();
         removeLoading(loadingId);
-        
+
         if (response.ok && data.status === 200) {
             appendMessage("bot", data.data.answer);
         } else {
@@ -691,40 +691,96 @@ async function sendMessage() {
 // ==========================================
 // 8. UI HELPERS (APPEND MESSAGE & LOADING)
 // ==========================================
+// ==========================================
+// 8. UI HELPERS (APPEND MESSAGE & LOADING)
+// ==========================================
+function prepareMarkdownText(text) {
+    if (!text) return "";
+    
+    let cleaned = text.trim();
+    
+    // Strip redundant outer ```markdown ... ``` or ```md ... ``` wrappers if the LLM wrapped the entire answer in a code block
+    const outerCodeBlockRegex = /^```(?:markdown|md)?\s*([\s\S]*?)\s*```$/i;
+    const match = cleaned.match(outerCodeBlockRegex);
+    if (match) {
+        cleaned = match[1].trim();
+    }
+    
+    // Pre-process markdown images: replace unencoded spaces in ![alt](/path with space.jpg)
+    return cleaned.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
+        const cleanUrl = url.trim().replace(/ /g, '%20');
+        return `![${alt}](${cleanUrl})`;
+    });
+}
+
+function openImageModal(src, alt) {
+    const modal = document.getElementById("image-modal");
+    const img = document.getElementById("image-modal-img");
+    const caption = document.getElementById("image-modal-caption");
+    if (!modal || !img) return;
+
+    img.src = src;
+    caption.textContent = alt || "Keyframe Image";
+    modal.classList.remove("hidden");
+    setTimeout(() => {
+        modal.classList.remove("opacity-0");
+    }, 10);
+}
+
+function closeImageModal() {
+    const modal = document.getElementById("image-modal");
+    if (!modal) return;
+    modal.classList.add("opacity-0");
+    setTimeout(() => {
+        modal.classList.add("hidden");
+    }, 300);
+}
+
 function appendMessage(role, text) {
     const history = document.getElementById("chat-history");
     const isBot = role === "bot";
     const div = document.createElement("div");
-    
-    div.className = `msg-animate flex gap-4 max-w-4xl mx-auto ${isBot ? "" : "flex-row-reverse"}`;
-    const contentHtml = isBot ? marked.parse(text) : text.replace(/\n/g, '<br>');
 
-    // Download Button Logic
-    let downloadBtn = "";
-    if (isBot) {
-        downloadBtn = `
-            <div class="flex justify-end mt-2">
-                <button onclick="downloadReport('${encodeURIComponent(text)}')" 
-                        class="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-slate-400 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-500/20 rounded-lg transition-all group"
-                        title="Download as Markdown">
-                    <span class="material-symbols-rounded text-sm text-slate-500 group-hover:text-brand-400 transition">download</span>
-                    Download Report
-                </button>
-            </div>
-        `;
-    }
+    div.className = `msg-animate flex gap-4 max-w-4xl mx-auto ${isBot ? "" : "flex-row-reverse"}`;
+    
+    const processedText = isBot ? prepareMarkdownText(text) : text;
+    const contentHtml = isBot ? marked.parse(processedText) : text.replace(/\n/g, '<br>');
 
     div.innerHTML = `
         <div class="w-9 h-9 rounded-xl ${isBot ? "bg-brand-500/10 border border-brand-500/20 text-brand-400" : "bg-slate-800 border border-white/5 text-slate-300"} flex items-center justify-center flex-shrink-0 shadow-md">
             <span class="material-symbols-rounded text-lg">${isBot ? "terminal" : "person"}</span>
         </div>
-        <div class="${isBot ? "flex-1" : ""} max-w-3xl">
-            <div class="${isBot ? "glass-card border border-white/5 text-slate-200 w-full" : "bg-gradient-to-r from-brand-600 to-indigo-600 text-white shadow-xl shadow-brand-600/10 w-fit ml-auto"} px-5 py-4 rounded-2xl ${isBot ? "rounded-tl-none" : "rounded-tr-none"} text-[13px] leading-relaxed prose prose-p:my-1 prose-ul:my-1">
+        <div class="${isBot ? "flex-1 min-w-0" : ""} max-w-3xl">
+            <div class="${isBot ? "glass-card border border-white/5 text-slate-200 w-full overflow-hidden" : "bg-gradient-to-r from-brand-600 to-indigo-600 text-white shadow-xl shadow-brand-600/10 w-fit ml-auto"} px-5 py-4 rounded-2xl ${isBot ? "rounded-tl-none" : "rounded-tr-none"} text-[13px] leading-relaxed prose prose-p:my-1 prose-ul:my-1 break-words">
                 ${contentHtml}
             </div>
-            ${downloadBtn}
+            ${isBot ? `
+                <div class="flex justify-end mt-2">
+                    <button class="download-report-btn flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-slate-400 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-500/20 rounded-lg transition-all group cursor-pointer"
+                            title="Download as Markdown">
+                        <span class="material-symbols-rounded text-sm text-slate-500 group-hover:text-brand-400 transition">download</span>
+                        Download Report
+                    </button>
+                </div>
+            ` : ''}
         </div>
     `;
+    
+    // Bind click event directly to prevent inline onclick string escaping syntax errors
+    if (isBot) {
+        const downloadBtnEl = div.querySelector('.download-report-btn');
+        if (downloadBtnEl) {
+            downloadBtnEl.onclick = () => downloadReportDirect(text);
+        }
+    }
+
+    // Attach interactive styling and lightbox modal click handler to any rendered <img> elements
+    div.querySelectorAll("img").forEach(img => {
+        img.className = "rounded-2xl border border-slate-200 dark:border-white/10 shadow-lg my-3 max-h-80 max-w-full object-contain cursor-pointer transition-all duration-200 hover:scale-[1.015] hover:shadow-brand-500/20";
+        img.title = "Click to view full size";
+        img.onclick = () => openImageModal(img.src, img.alt);
+    });
+
     history.appendChild(div);
     history.scrollTop = history.scrollHeight;
 }
@@ -758,26 +814,38 @@ function removeLoading(id) { const el = document.getElementById(id); if (el) el.
 // ==========================================
 // 9. DOWNLOAD HELPER
 // ==========================================
-function downloadReport(encodedText) {
+function downloadReportDirect(text) {
     try {
-        const text = decodeURIComponent(encodedText);
-        const blob = new Blob([text], { type: "text/markdown" });
+        if (!text) {
+            showToast("No content to download", "error");
+            return;
+        }
+        const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
         const url = URL.createObjectURL(blob);
-        
+
         const a = document.createElement("a");
         a.href = url;
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
         a.download = `Research_Report_${timestamp}.md`;
-        
+
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
         showToast("Report downloaded successfully", "success");
     } catch (e) {
-        console.error(e);
+        console.error("Download failed:", e);
         showToast("Failed to download report", "error");
+    }
+}
+
+function downloadReport(encodedText) {
+    try {
+        const text = decodeURIComponent(encodedText);
+        downloadReportDirect(text);
+    } catch (e) {
+        downloadReportDirect(encodedText);
     }
 }
 
@@ -840,34 +908,8 @@ document.addEventListener('keydown', (e) => {
 // AUTHENTICATION
 // ==========================================
 async function logout() {
-    // Navigate directly (not via fetch) so the browser follows the WorkOS
+    // Navigate directly (not via fetch) so the browser follows the identity provider
     // logout redirect natively without triggering CORS restrictions.
     window.location.href = `${API_URL}/auth/logout`;
 }
 
-async function switchAccount() {
-    const { value: email } = await Swal.fire({
-        title: 'Switch Account',
-        input: 'email',
-        inputPlaceholder: 'Enter your email address',
-        inputLabel: 'Sign in with a different account',
-        showCancelButton: true,
-        confirmButtonText: 'Continue',
-        confirmButtonColor: '#8b5cf6',
-        background: document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff',
-        color: document.documentElement.classList.contains('dark') ? '#f1f5f9' : '#0f172a',
-        inputAttributes: {
-            autocomplete: 'email'
-        },
-        customClass: {
-            input: 'swal-input-custom'
-        }
-    });
-
-    if (email) {
-        window.location.href = `/auth/switch?email=${encodeURIComponent(email)}`;
-    } else if (email === '') {
-        // If user submitted empty, just go to switch without hint
-        window.location.href = '/auth/switch';
-    }
-}
