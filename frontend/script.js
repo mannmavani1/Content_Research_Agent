@@ -264,7 +264,7 @@ function showToast(message, type = "info") {
     // Send Native Desktop Push Notification if the tab is hidden or minimized
     if (document.hidden && window.Notification && Notification.permission === "granted") {
         try {
-            new Notification("RAG Studio Update", {
+            new Notification("Content Research Agent Update", {
                 body: message,
                 tag: "rag-studio-notification"
             });
@@ -515,13 +515,20 @@ async function resetSession() {
 // ==========================================
 function setMode(mode) {
     currentMode = mode;
+    
+    const activeClasses = ['active', 'bg-brand-600', 'bg-brand-500', 'text-white', 'shadow-md', 'shadow-lg', 'shadow-brand-500/25'];
+    const inactiveClasses = ['text-slate-600', 'dark:text-slate-400', 'hover:text-slate-900', 'dark:hover:text-white'];
+
     document.querySelectorAll('.mode-btn').forEach(btn => {
-        btn.classList.remove('bg-gray-900', 'text-white', 'shadow-lg', 'ring-2');
-        btn.classList.add('bg-white', 'text-gray-600', 'border', 'border-gray-200');
+        btn.classList.remove(...activeClasses);
+        btn.classList.add(...inactiveClasses);
     });
+    
     const activeBtn = document.querySelector(`.mode-btn[data-mode="${mode}"]`);
-    activeBtn.classList.remove('bg-white', 'text-gray-600', 'border', 'border-gray-200');
-    activeBtn.classList.add('bg-gray-900', 'text-white', 'shadow-lg', 'ring-2', 'ring-gray-900', 'ring-offset-2');
+    if (activeBtn) {
+        activeBtn.classList.remove(...inactiveClasses);
+        activeBtn.classList.add('active', 'bg-brand-600', 'text-white', 'shadow-md');
+    }
 
     const labels = {
         chat: "Auto Routing (AI Decides)",
