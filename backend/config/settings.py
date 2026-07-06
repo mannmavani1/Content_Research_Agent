@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Settings:
     """
@@ -17,6 +20,10 @@ class Settings:
         LOCAL_DB_DIR (str): The subdirectory where the SQLite database persists.
         LLM_MODEL (str): The specific LLM version identifier (e.g., for Groq or Ollama).
         RETRIEVAL_STRATEGY (str): The retrieval strategy, e.g., 'vectorless', 'vector', 'hybrid'.
+        WORKOS_CLIENT_ID (str): WorkOS Client ID
+        WORKOS_API_KEY (str): WorkOS API Key
+        WORKOS_REDIRECT_URI (str): OAuth Callback URI
+        JWT_SECRET_KEY (str): Secret for signing session JWTs
     """
     PROJECT_NAME: str = "Content Research Agent"
     VERSION: str = "1.0.0"
@@ -29,6 +36,11 @@ class Settings:
     LLM_MODEL: str = "llama-3.3-70b-versatile"
     RETRIEVAL_STRATEGY: str = "vectorless"
     LOCAL_DB_PATH: str = os.path.join(LOCAL_DB_DIR, "documents.db")
+
+    WORKOS_CLIENT_ID: str = os.getenv("WORKOS_CLIENT_ID", "")
+    WORKOS_API_KEY: str = os.getenv("WORKOS_API_KEY", "")
+    WORKOS_REDIRECT_URI: str = os.getenv("WORKOS_REDIRECT_URI", "http://localhost:8000/auth/callback")
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change_me_to_a_secure_random_string_in_production")
 
     def init_dirs(self):
         """

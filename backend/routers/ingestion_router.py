@@ -1,14 +1,19 @@
 import os
 import shutil
 import time
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Path
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Path, Depends
 from typing import Optional
 from backend.config.settings import settings
 from backend.schemas.api_models import PasteRequest, StandardResponse
 from backend.utils.responses import success_response
 from backend.services.ingestion import process_document, reset_database
+from backend.utils.dependencies import get_current_user
 
-router = APIRouter(prefix="/ingestion", tags=["Ingestion"])
+router = APIRouter(
+    prefix="/ingestion", 
+    tags=["Ingestion"],
+    dependencies=[Depends(get_current_user)]
+)
 
 @router.post("/upload", response_model=StandardResponse)
 async def upload_file(file: UploadFile = File(...), conversation_id: Optional[int] = Form(None)):

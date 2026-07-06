@@ -13,6 +13,23 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     try {
+        // Check authentication status first
+        const authResponse = await fetch(`${API_URL}/auth/me`);
+        if (!authResponse.ok) {
+            // Not authenticated, show login overlay
+            document.getElementById('login-overlay').classList.remove('hidden');
+            return; // Stop initialization
+        }
+        
+        // Authenticated! Show user profile and continue
+        const userData = await authResponse.json();
+        const userNameEl = document.getElementById('user-name');
+        if (userNameEl && userData.first_name) {
+            userNameEl.textContent = userData.first_name;
+        }
+        document.getElementById('user-profile').classList.remove('hidden');
+        document.getElementById('login-overlay').classList.add('hidden');
+
         await loadConversations();
     } catch (e) {
         console.error("Failed to load session:", e);
@@ -818,3 +835,39 @@ document.addEventListener('keydown', (e) => {
         if (input) input.focus();
     }
 });
+
+// ==========================================
+// AUTHENTICATION
+// ==========================================
+async function logout() {
+    // Navigate directly (not via fetch) so the browser follows the WorkOS
+    // logout redirect natively without triggering CORS restrictions.
+    window.location.href = `${API_URL}/auth/logout`;
+}
+
+async function switchAccount() {
+    const { value: email } = await Swal.fire({
+        title: 'Switch Account',
+        input: 'email',
+        inputPlaceholder: 'Enter your email address',
+        inputLabel: 'Sign in with a different account',
+        showCancelButton: true,
+        confirmButtonText: 'Continue',
+        confirmButtonColor: '#8b5cf6',
+        background: document.documentElement.classList.contains('dark') ? '#1e293b' : '#fff',
+        color: document.documentElement.classList.contains('dark') ? '#f1f5f9' : '#0f172a',
+        inputAttributes: {
+            autocomplete: 'email'
+        },
+        customClass: {
+            input: 'swal-input-custom'
+        }
+    });
+
+    if (email) {
+        window.location.href = `/auth/switch?email=${encodeURIComponent(email)}`;
+    } else if (email === '') {
+        // If user submitted empty, just go to switch without hint
+        window.location.href = '/auth/switch';
+    }
+}

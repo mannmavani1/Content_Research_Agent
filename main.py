@@ -14,6 +14,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from backend.config.settings import settings
 from backend.routers import ingestion_router
 from backend.routers import chat_router
+from backend.routers import auth_router
 
 """
 Content Research Agent - Main Entry Point
@@ -45,6 +46,7 @@ app.add_middleware(
 
 # --- Router Registration ---
 # Mount the specialized routers to keep the API logic modular and clean.
+app.include_router(auth_router.router)
 app.include_router(ingestion_router.router)
 app.include_router(chat_router.router)
 

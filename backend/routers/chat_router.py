@@ -1,11 +1,16 @@
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Depends
 from backend.schemas.api_models import ChatRequest, CreateConversationRequest, RenameConversationRequest
 from backend.utils.responses import success_response
 from backend.agent.workflow import research_agent
 from backend.database.database import create_conversation, get_conversations, add_message, get_messages
 from langchain_core.messages import HumanMessage, AIMessage
+from backend.utils.dependencies import get_current_user
 
-router = APIRouter(prefix="/tools", tags=["Research Tools"])
+router = APIRouter(
+    prefix="/tools", 
+    tags=["Research Tools"],
+    dependencies=[Depends(get_current_user)]
+)
 
 async def run_agent(message: str, force_mode: str = None, conversation_id: int = None):
     try:
