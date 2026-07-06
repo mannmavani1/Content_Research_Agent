@@ -66,7 +66,7 @@ async function loadConversations() {
                 switchConversation(data.data[0].id);
             }
         } else {
-            await createNewConversation();
+            showStartChatScreen();
         }
     } catch (e) {
         console.error(e);
@@ -151,8 +151,12 @@ async function switchConversation(id) {
     const history = document.getElementById("chat-history");
     history.innerHTML = ""; 
     
-    const welcome = document.getElementById("welcome-screen");
-    if (welcome) welcome.style.display = "none";
+    
+    // Enable inputs since a chat is active
+    updateInputsState(true);
+    
+    const panel = document.getElementById("chat-input-panel");
+    if (panel) panel.classList.remove("hidden");
     
     await loadConversationsWithoutSwitching();
     
@@ -193,6 +197,87 @@ async function fetchActiveFiles(conversationId) {
         }
     } catch (e) {
         console.error("Failed to fetch active files:", e);
+    }
+}
+
+function showStartChatScreen() {
+    currentConversationId = null;
+    
+    const history = document.getElementById("chat-history");
+    history.innerHTML = `
+        <div class="flex flex-col items-center justify-center h-full text-center max-w-2xl mx-auto space-y-6" id="welcome-screen">
+            <div class="w-16 h-16 bg-brand-500/5 dark:bg-gradient-to-tr dark:from-brand-600/20 dark:to-indigo-500/20 border border-brand-500/20 dark:border-brand-500/30 rounded-2xl flex items-center justify-center shadow-inner animate-pulse">
+                <span class="material-symbols-rounded text-brand-600 dark:text-brand-400 text-3xl">chat</span>
+            </div>
+            <div class="space-y-2">
+                <h2 class="font-display font-bold text-2xl text-slate-800 dark:text-white tracking-wide">Start a New Research Session</h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-md mx-auto">Create a workspace session to begin uploading files, pasting context, and running analyses.</p>
+            </div>
+            
+            <button onclick="createNewConversation()" class="flex items-center gap-2 px-6 py-3 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow-md shadow-brand-600/20 active:scale-95 transition-all">
+                <span class="material-symbols-rounded text-sm">add</span>
+                Start Chat
+            </button>
+        </div>
+    `;
+    
+    const fileTitle = document.getElementById("file-list-title");
+    if (fileTitle) fileTitle.classList.add("hidden");
+    const fileList = document.getElementById("file-list");
+    if (fileList) fileList.innerHTML = "";
+    
+    const panel = document.getElementById("chat-input-panel");
+    if (panel) panel.classList.add("hidden");
+    
+    updateInputsState(false);
+}
+
+function updateInputsState(hasChat) {
+    const userInput = document.getElementById("user-input");
+    const sendBtn = userInput ? userInput.nextElementSibling : null;
+    const dropZone = document.getElementById("drop-zone");
+    const pasteArea = document.getElementById("paste-area");
+    const pasteBtn = document.getElementById("paste-submit");
+    
+    if (userInput) {
+        userInput.disabled = !hasChat;
+        if (!hasChat) {
+            userInput.placeholder = "Start a chat session first to begin...";
+        } else {
+            userInput.placeholder = "Formulate queries or tasks for your loaded knowledge...";
+        }
+    }
+    if (sendBtn) {
+        sendBtn.disabled = !hasChat;
+        if (!hasChat) {
+            sendBtn.classList.add("opacity-50", "pointer-events-none");
+        } else {
+            sendBtn.classList.remove("opacity-50", "pointer-events-none");
+        }
+    }
+    
+    if (dropZone) {
+        if (!hasChat) {
+            dropZone.classList.add("opacity-40", "pointer-events-none");
+        } else {
+            dropZone.classList.remove("opacity-40", "pointer-events-none");
+        }
+    }
+    
+    if (pasteArea) {
+        pasteArea.disabled = !hasChat;
+        if (!hasChat) {
+            pasteArea.placeholder = "Start a chat session first to paste data...";
+        } else {
+            pasteArea.placeholder = "Paste structural data, notes, or articles here...";
+        }
+    }
+    if (pasteBtn) {
+        if (!hasChat) {
+            pasteBtn.classList.add("opacity-50", "pointer-events-none");
+        } else {
+            pasteBtn.classList.remove("opacity-50", "pointer-events-none");
+        }
     }
 }
 
@@ -616,8 +701,8 @@ function appendMessage(role, text) {
         <div class="w-9 h-9 rounded-xl ${isBot ? "bg-brand-500/10 border border-brand-500/20 text-brand-400" : "bg-slate-800 border border-white/5 text-slate-300"} flex items-center justify-center flex-shrink-0 shadow-md">
             <span class="material-symbols-rounded text-lg">${isBot ? "terminal" : "person"}</span>
         </div>
-        <div class="flex-1 max-w-3xl">
-            <div class="${isBot ? "glass-card border border-white/5 text-slate-200" : "bg-gradient-to-r from-brand-600 to-indigo-600 text-white shadow-xl shadow-brand-600/10"} px-5 py-4 rounded-2xl ${isBot ? "rounded-tl-none" : "rounded-tr-none"} text-[13px] leading-relaxed prose prose-p:my-1 prose-ul:my-1 w-full">
+        <div class="${isBot ? "flex-1" : ""} max-w-3xl">
+            <div class="${isBot ? "glass-card border border-white/5 text-slate-200 w-full" : "bg-gradient-to-r from-brand-600 to-indigo-600 text-white shadow-xl shadow-brand-600/10 w-fit ml-auto"} px-5 py-4 rounded-2xl ${isBot ? "rounded-tl-none" : "rounded-tr-none"} text-[13px] leading-relaxed prose prose-p:my-1 prose-ul:my-1">
                 ${contentHtml}
             </div>
             ${downloadBtn}

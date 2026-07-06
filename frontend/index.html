@@ -253,7 +253,7 @@
                 <div class="relative rounded-2xl border border-slate-300/60 dark:border-white/5 bg-slate-100/50 dark:bg-white/[0.02] overflow-hidden focus-within:border-brand-500/50 transition-colors">
                     <textarea id="paste-area" class="w-full h-28 p-4 bg-transparent border-none text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-0 text-xs resize-none transition" placeholder="Paste structural data, notes, or articles here..."></textarea>
                     <div class="absolute bottom-2.5 right-2.5">
-                        <button onclick="handlePaste()" class="bg-brand-600 hover:bg-brand-700 text-white p-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center animate-pulse" title="Process Text">
+                        <button id="paste-submit" onclick="handlePaste()" class="bg-brand-600 hover:bg-brand-700 text-white p-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center animate-pulse" title="Process Text">
                             <span class="material-symbols-rounded text-sm">bolt</span>
                         </button>
                     </div>
@@ -359,7 +359,7 @@
         </div>
 
         <!-- Chat Action Inputs -->
-        <div class="flex-shrink-0 bg-gradient-to-t from-slate-50 dark:from-slateDark-950 via-slate-50/80 dark:via-slateDark-950/60 to-transparent p-6 z-10 w-full transition-colors duration-300">
+        <div id="chat-input-panel" class="hidden flex-shrink-0 bg-gradient-to-t from-slate-50 dark:from-slateDark-950 via-slate-50/80 dark:via-slateDark-950/60 to-transparent p-6 z-10 w-full transition-colors duration-300">
             <div class="max-w-4xl mx-auto space-y-4">
                 
                 <!-- Quick Mode Toggle Tabs -->
