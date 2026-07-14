@@ -94,6 +94,75 @@ def extract_triplets_from_text(text: str) -> list:
         return []
 
 
+def extract_and_caption_pdf_images(file_path: str) -> list:
+    """
+    Extracts embedded images from a PDF, captions them using the Groq Vision API,
+    and returns a list of Document objects representing those visual components.
+    """
+    import fitz
+    from langchain_core.documents import Document
+    from backend.services.multimodal.image_processor import caption_image_with_vision
+    import tempfile
+    
+    doc_chunks = []
+    try:
+        doc = fitz.open(file_path)
+        filename = os.path.basename(file_path)
+        temp_dir = tempfile.gettempdir()
+        
+        image_count = 0
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            image_list = page.get_images(full=True)
+            
+            for img_idx, img_info in enumerate(image_list):
+                xref = img_info[0]
+                base_image = doc.extract_image(xref)
+                image_bytes = base_image["image"]
+                image_ext = base_image["ext"]
+                
+                temp_image_path = os.path.join(temp_dir, f"extracted_pdf_img_{xref}.{image_ext}")
+                with open(temp_image_path, "wb") as f:
+                    f.write(image_bytes)
+                
+                try:
+                    print(f"Extracted image {xref} from PDF page {page_num + 1}. Captioning...")
+                    caption = caption_image_with_vision(temp_image_path)
+                    
+                    content_text = (
+                        f"PDF Document Visual Component (from {filename}, Page {page_num + 1}):\n"
+                        f"Visual Scene Description: \"{caption}\""
+                    )
+                    
+                    doc_chunks.append(Document(
+                        page_content=content_text,
+                        metadata={
+                            "source": file_path,
+                            "filename": filename,
+                            "media_type": "image",
+                            "page": page_num + 1,
+                            "caption": caption
+                        }
+                    ))
+                    image_count += 1
+                    if image_count >= 15: # Safety cap
+                        print("Reached maximum image extraction limit (15 images). Skipping remaining images.")
+                        break
+                except Exception as e:
+                    print(f"Error captioning extracted PDF image {xref}: {e}")
+                finally:
+                    if os.path.exists(temp_image_path):
+                        os.remove(temp_image_path)
+            
+            if image_count >= 15:
+                break
+                
+    except Exception as e:
+        print(f"Failed to extract images from PDF {file_path}: {e}")
+        
+    return doc_chunks
+
+
 def process_document(file_path: str, conversation_id: int = None) -> int:
     """
     Orchestrates the complete ingestion pipeline for a single document or media file.
@@ -141,6 +210,17 @@ def process_document(file_path: str, conversation_id: int = None) -> int:
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         splits = text_splitter.split_documents(documents)
         print(f"Split text into {len(splits)} chunks")
+
+        # If it's a PDF, also run the visual image extraction pass
+        if ext == ".pdf":
+            try:
+                print("Running PDF image extraction pass...")
+                visual_splits = extract_and_caption_pdf_images(file_path)
+                if visual_splits:
+                    print(f"Adding {len(visual_splits)} visual chunks to PDF document splits")
+                    splits.extend(visual_splits)
+            except Exception as e:
+                print(f"Error extracting visual chunks from PDF: {e}")
     
     # Inject conversation_id into all splits
     if conversation_id is not None:

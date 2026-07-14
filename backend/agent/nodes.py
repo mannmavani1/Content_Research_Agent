@@ -1,3 +1,5 @@
+import os
+from tavily import TavilyClient
 from typing import Literal
 from langgraph.graph import StateGraph, END
 from backend.models.state import AgentState
@@ -76,7 +78,7 @@ def retrieve_node(state: AgentState):
         
         # Multimodal formatting for LLM prompt context injection
         if media_type == "image":
-            entry = f"Source: {filename} (Image File)\nContent: {d.page_content}"
+            entry = f"Source: {filename} (Image File, available at URL: /storage/{filename})\nContent: {d.page_content}"
         elif media_type == "audio":
             t = d.metadata.get("timestamp", "00:00")
             entry = f"Source: {filename} (Audio Segment at {t})\nContent: {d.page_content}"
@@ -186,3 +188,73 @@ async def qa_node(state: AgentState):
         dict: The result of the qa_chain.
     """
     return await run_tool(state, qa_chain, "qa")
+
+async def evaluate_context_node(state: AgentState):
+    """
+    Evaluates if the retrieved documents contain sufficient context to answer the question.
+    """
+    docs = state.get("documents", [])
+    if not docs:
+        print("No documents retrieved. Web search is required.")
+        return {"needs_search": True}
+        
+    context = "\n\n".join(docs)
+    question = state.get("question", "")
+    
+    llm = get_llm(streaming=False)
+    prompt = PromptTemplate.from_template(
+        """You are an information grading agent. Your job is to determine whether the provided document context has sufficient information to answer the user's question.
+        
+        If the question requires information that is not in the context (such as more recent statistics, comparison with future/unreleased data, details of subsequent years, or is completely unrelated to the documents), you must reply with needs_search: true.
+        Otherwise, if the question can be fully answered using the provided context, reply with needs_search: false.
+        
+        Document Context:
+        {context}
+        
+        User Question:
+        {question}
+        
+        Output format must be strict JSON: {{"needs_search": true}} or {{"needs_search": false}}
+        """
+    )
+    
+    chain = prompt | llm | JsonOutputParser()
+    try:
+        result = await chain.ainvoke({"context": context, "question": question})
+        needs_search = result.get("needs_search", False)
+        print(f"Context evaluation result: needs_search = {needs_search}")
+        return {"needs_search": needs_search}
+    except Exception as e:
+        print(f"Error evaluating context: {e}, defaulting to no web search.")
+        return {"needs_search": False}
+
+async def web_search_node(state: AgentState):
+    """
+    Performs web search using Tavily and appends results to the document context.
+    """
+    question = state.get("question", "")
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    if not tavily_key:
+        print("TAVILY_API_KEY not found in environment. Skipping web search.")
+        return {}
+        
+    print(f"Executing Web Search for: {question}")
+    try:
+        client = TavilyClient(api_key=tavily_key)
+        response = client.search(query=question, max_results=5)
+        results = response.get("results", [])
+        
+        web_docs = []
+        for r in results:
+            title = r.get("title", "Web Page")
+            url = r.get("url", "")
+            content = r.get("content", "")
+            web_docs.append(f"Source URL: {url} (Title: {title})\nContent: {content}")
+            
+        current_docs = list(state.get("documents", []))
+        current_docs.extend(web_docs)
+        print(f"Web search completed. Added {len(web_docs)} external search chunks.")
+        return {"documents": current_docs}
+    except Exception as e:
+        print(f"Web search failed: {e}")
+        return {}

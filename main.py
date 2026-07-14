@@ -104,6 +104,10 @@ async def serve_storage_file(path: str):
         
     raise HTTPException(status_code=404, detail="File not found")
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("frontend/favicon.svg")
+
 @app.get("/")
 async def home():
     """

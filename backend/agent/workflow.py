@@ -11,7 +11,8 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from backend.agent.nodes import (
     router_node, retrieve_node, summarize_node, 
-    compare_node, extract_node, insight_node, qa_node
+    compare_node, extract_node, insight_node, qa_node,
+    evaluate_context_node, web_search_node
 )
 
 def build_graph():
@@ -33,6 +34,8 @@ def build_graph():
     # --- Node Definitions ---
     workflow.add_node("router", router_node)
     workflow.add_node("retrieve", retrieve_node)
+    workflow.add_node("evaluate_context", evaluate_context_node)
+    workflow.add_node("web_search", web_search_node)
     workflow.add_node("summarize", summarize_node)
     workflow.add_node("compare", compare_node)
     workflow.add_node("extract", extract_node)
@@ -40,9 +43,29 @@ def build_graph():
     workflow.add_node("qa", qa_node)
 
     # --- Edge Definitions ---
-    # Entry flow: First retrieve context, then decide how to process it.
+    # Entry flow: First retrieve context, then evaluate if web search is needed.
     workflow.set_entry_point("retrieve")
-    workflow.add_edge("retrieve", "router")
+    workflow.add_edge("retrieve", "evaluate_context")
+
+    def decide_web_search(state: AgentState) -> Literal["web_search", "router"]:
+        """
+        Conditional edge function to determine if a web search fallback is required.
+        """
+        if state.get("needs_search", False):
+            return "web_search"
+        return "router"
+
+    workflow.add_conditional_edges(
+        "evaluate_context",
+        decide_web_search,
+        {
+            "web_search": "web_search",
+            "router": "router"
+        }
+    )
+    
+    # After web search completes, it goes to the router node
+    workflow.add_edge("web_search", "router")
 
     def route_decision(state: AgentState) -> Literal["summarize", "compare", "extract", "insight", "qa"]:
         """

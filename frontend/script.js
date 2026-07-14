@@ -493,11 +493,46 @@ function addFileCard(filename) {
 
     title.classList.remove("hidden");
 
+    const ext = filename.split('.').pop().toLowerCase();
+    let icon = "description";
+    let iconColorClass = "text-brand-600 dark:text-brand-400";
+    let bgColorClass = "bg-brand-500/10 border-brand-500/20";
+
+    if (ext === "pdf") {
+        icon = "picture_as_pdf";
+        iconColorClass = "text-rose-600 dark:text-rose-400";
+        bgColorClass = "bg-rose-500/10 border-rose-500/20";
+    } else if (["docx", "doc", "txt", "md"].includes(ext)) {
+        icon = "article";
+        iconColorClass = "text-blue-600 dark:text-blue-400";
+        bgColorClass = "bg-blue-500/10 border-blue-500/20";
+    } else if (["xlsx", "xls", "csv"].includes(ext)) {
+        icon = "table_chart";
+        iconColorClass = "text-emerald-600 dark:text-emerald-400";
+        bgColorClass = "bg-emerald-500/10 border-emerald-500/20";
+    } else if (ext === "pptx") {
+        icon = "slideshow";
+        iconColorClass = "text-orange-600 dark:text-orange-400";
+        bgColorClass = "bg-orange-500/10 border-orange-500/20";
+    } else if (["png", "jpg", "jpeg", "webp", "gif"].includes(ext)) {
+        icon = "image";
+        iconColorClass = "text-amber-600 dark:text-amber-400";
+        bgColorClass = "bg-amber-500/10 border-amber-500/20";
+    } else if (["mp3", "wav", "m4a"].includes(ext)) {
+        icon = "audiotrack";
+        iconColorClass = "text-indigo-600 dark:text-indigo-400";
+        bgColorClass = "bg-indigo-500/10 border-indigo-500/20";
+    } else if (["mp4", "mov", "mkv"].includes(ext)) {
+        icon = "video_library";
+        iconColorClass = "text-cyan-600 dark:text-cyan-400";
+        bgColorClass = "bg-cyan-500/10 border-cyan-500/20";
+    }
+
     const card = document.createElement("div");
     card.className = "glass-card border border-slate-200 dark:border-white/5 rounded-xl p-3 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 hover:border-brand-500/30 transition-all group/card relative overflow-hidden";
     card.innerHTML = `
-        <div class="w-8 h-8 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0">
-            <span class="material-symbols-rounded text-brand-600 dark:text-brand-400 text-base">description</span>
+        <div class="w-8 h-8 rounded-lg ${bgColorClass} border flex items-center justify-center flex-shrink-0">
+            <span class="material-symbols-rounded ${iconColorClass} text-base">${icon}</span>
         </div>
         <div class="flex-1 min-w-0">
             <p class="text-xs font-semibold text-slate-700 dark:text-slate-100 truncate pr-6" title="${filename}">${filename}</p>
@@ -864,9 +899,15 @@ function prepareMarkdownText(text) {
         cleaned = match[1].trim();
     }
     
-    // Pre-process markdown images: replace unencoded spaces in ![alt](/path with space.jpg)
+    // Pre-process markdown images: replace unencoded spaces and fix relative storage paths
     return cleaned.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
-        const cleanUrl = url.trim().replace(/ /g, '%20');
+        let cleanUrl = url.trim().replace(/ /g, '%20');
+        if (!cleanUrl.startsWith('http') && !cleanUrl.startsWith('/storage/') && !cleanUrl.startsWith('/static/')) {
+            if (cleanUrl.startsWith('/')) {
+                cleanUrl = cleanUrl.substring(1);
+            }
+            cleanUrl = '/storage/' + cleanUrl;
+        }
         return `![${alt}](${cleanUrl})`;
     });
 }

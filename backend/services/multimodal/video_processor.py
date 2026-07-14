@@ -3,8 +3,7 @@ import subprocess
 import glob
 from backend.config.settings import settings
 from backend.services.multimodal.audio_processor import process_audio_file, format_timestamp
-from backend.services.multimodal.image_processor import get_captioner
-from PIL import Image
+from backend.services.multimodal.image_processor import caption_image_with_vision
 
 def process_video_file(file_path: str) -> list:
     """
@@ -82,9 +81,8 @@ def process_video_file(file_path: str) -> list:
         ]
         subprocess.run(ffmpeg_frame_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         
-        # 4. Describe frames using our local BLIP captioner
+        # 4. Describe frames using Groq Vision API
         extracted_frames = sorted(glob.glob(os.path.join(frames_dir, f"{base_name_no_ext}_frame_*.jpg")))
-        captioner = get_captioner()
         
         for idx, frame_path in enumerate(extracted_frames):
             # Parse frame number to get timestamp (frame 1 = 0s, frame 2 = 10s, frame 3 = 20s, etc.)
@@ -92,11 +90,8 @@ def process_video_file(file_path: str) -> list:
             timestamp_str = format_timestamp(seconds)
             
             try:
-                with Image.open(frame_path) as img:
-                    if img.mode != "RGB":
-                        img = img.convert("RGB")
-                    res = captioner(img, text="")
-                    caption = res[0].get("generated_text", "Visual scene description unavailable")
+                print(f"Captioning frame {idx + 1} using Groq Vision API...")
+                caption = caption_image_with_vision(frame_path)
             except Exception as e:
                 print(f"Error describing frame {frame_path}: {e}")
                 caption = "Visual scene."
