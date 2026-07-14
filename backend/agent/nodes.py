@@ -10,7 +10,7 @@ from backend.services.llm import get_llm
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
-def router_node(state: AgentState):
+async def router_node(state: AgentState):
     """
     Analyzes the user's query and routes the workflow to the appropriate processing node.
 
@@ -24,7 +24,7 @@ def router_node(state: AgentState):
     question = state["question"]
     print(f"Routing: {question}")
 
-    llm = get_llm()
+    llm = get_llm(streaming=False)
 
     prompt = PromptTemplate.from_template(
         """You are a routing agent. Your ONLY job is to classify the user's query.
@@ -46,7 +46,7 @@ def router_node(state: AgentState):
     router_chain = prompt | llm | JsonOutputParser()
 
     try:
-        decision = router_chain.invoke({"question": question})
+        decision = await router_chain.ainvoke({"question": question})
         category = decision.get("category", "qa")
         print(f"Routed to: {category}")
     except Exception as e:
@@ -93,7 +93,7 @@ def retrieve_node(state: AgentState):
 
     return {"documents": formatted_docs}
 
-def run_tool(state: AgentState, chain, name: str):
+async def run_tool(state: AgentState, chain, name: str):
     """
     A helper function to execute a specific LangChain processing chain.
 
@@ -121,13 +121,13 @@ def run_tool(state: AgentState, chain, name: str):
         chat_history_str = "No previous chat history."
 
     try:
-        result = chain.invoke({"context": context, "question": question, "chat_history": chat_history_str})
+        result = await chain.ainvoke({"context": context, "question": question, "chat_history": chat_history_str})
         return {"generation": result}
     except Exception as e:
         print(f"Error in {name}: {e}")
         return {"generation": f"Error generating response: {e}"}
 
-def summarize_node(state: AgentState):
+async def summarize_node(state: AgentState):
     """
     Generates a concise summary or overview of the retrieved documents.
 
@@ -137,9 +137,9 @@ def summarize_node(state: AgentState):
     Returns:
         dict: The result of the summarizer_chain.
     """
-    return run_tool(state, summarizer_chain, "summarize")
+    return await run_tool(state, summarizer_chain, "summarize")
 
-def compare_node(state: AgentState):
+async def compare_node(state: AgentState):
     """
     Performs a comparative analysis between different documents or entities within the context.
 
@@ -149,9 +149,9 @@ def compare_node(state: AgentState):
     Returns:
         dict: The result of the comparator_chain.
     """
-    return run_tool(state, comparator_chain, "compare")
+    return await run_tool(state, comparator_chain, "compare")
 
-def extract_node(state: AgentState):
+async def extract_node(state: AgentState):
     """
     Identifies and pulls specific data points, tables, or facts from the retrieved documents.
 
@@ -161,9 +161,9 @@ def extract_node(state: AgentState):
     Returns:
         dict: The result of the extractor_chain.
     """
-    return run_tool(state, extractor_chain, "extract")
+    return await run_tool(state, extractor_chain, "extract")
 
-def insight_node(state: AgentState):
+async def insight_node(state: AgentState):
     """
     Analyzes the data to provide recommendations, deep analysis, or strategic insights.
 
@@ -173,9 +173,9 @@ def insight_node(state: AgentState):
     Returns:
         dict: The result of the insight_chain.
     """
-    return run_tool(state, insight_chain, "insight")
+    return await run_tool(state, insight_chain, "insight")
 
-def qa_node(state: AgentState):
+async def qa_node(state: AgentState):
     """
     Answers general or factual questions using the provided document context.
 
@@ -185,4 +185,4 @@ def qa_node(state: AgentState):
     Returns:
         dict: The result of the qa_chain.
     """
-    return run_tool(state, qa_chain, "qa")
+    return await run_tool(state, qa_chain, "qa")

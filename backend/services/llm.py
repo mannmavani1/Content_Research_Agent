@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env file (specifically GROQ_API_KEY)
 load_dotenv()
 
-def get_llm():
+def get_llm(streaming: bool = True):
     """
     Initializes the ChatGroq language model client.
 
@@ -25,5 +25,6 @@ def get_llm():
         model=settings.LLM_MODEL,
         temperature=0,
         max_retries=2,
+        streaming=streaming,
         api_key=os.getenv("GROQ_API_KEY")
     )

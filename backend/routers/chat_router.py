@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Path, Depends
+from fastapi import APIRouter, HTTPException, Path, Depends, WebSocket, WebSocketDisconnect
 from backend.schemas.api_models import ChatRequest, CreateConversationRequest, RenameConversationRequest
 from backend.utils.responses import success_response
 from backend.agent.workflow import research_agent
@@ -7,12 +7,11 @@ from backend.database.database import (
     verify_conversation_owner, delete_conversation, rename_conversation
 )
 from langchain_core.messages import HumanMessage, AIMessage
-from backend.utils.dependencies import get_current_user
+from backend.utils.dependencies import get_current_user, get_current_user_ws
 
 router = APIRouter(
     prefix="/tools", 
-    tags=["Research Tools"],
-    dependencies=[Depends(get_current_user)]
+    tags=["Research Tools"]
 )
 
 def get_user_id(current_user: dict) -> str:
@@ -106,6 +105,90 @@ async def get_conversation_history(conv_id: int = Path(...), current_user: dict 
         raise HTTPException(status_code=403, detail="Access denied to this conversation.")
     msgs = get_messages(conv_id, user_id=user_id)
     return success_response(message="Messages fetched", data=msgs)
+
+# --- WebSocket Chat Streaming Endpoint ---
+@router.websocket("/ws/chat")
+async def websocket_chat(websocket: WebSocket, user_payload: dict = Depends(get_current_user_ws)):
+    await websocket.accept()
+    user_id = str(user_payload.get("id") or user_payload.get("email"))
+    
+    try:
+        while True:
+            # Expecting message JSON format: {"message": "...", "conversation_id": ...}
+            try:
+                data = await websocket.receive_json()
+            except Exception:
+                # Break if client sent invalid JSON or closed connection without proper disconnect event
+                break
+
+            message = data.get("message")
+            conversation_id = data.get("conversation_id")
+            mode = data.get("mode")
+
+            if not message:
+                await websocket.send_json({"type": "error", "message": "Missing message content."})
+                continue
+
+            if conversation_id:
+                if not verify_conversation_owner(conversation_id, user_id):
+                    await websocket.send_json({"type": "error", "message": "Access denied to this conversation."})
+                    continue
+
+            # Load history if conversation_id is provided
+            history_msgs = []
+            if conversation_id:
+                db_msgs = get_messages(conversation_id, user_id=user_id)
+                for msg in db_msgs:
+                    if msg["role"] == "user":
+                        history_msgs.append(HumanMessage(content=msg["content"]))
+                    elif msg["role"] == "bot":
+                        history_msgs.append(AIMessage(content=msg["content"]))
+
+            initial_state = {
+                "question": message,
+                "messages": history_msgs,
+                "conversation_id": conversation_id or 0
+            }
+
+            # Handle force mode matching the REST endpoints logic
+            if mode and mode != "chat":
+                if mode == "summarize": message = "Summarize this document: " + message
+                elif mode == "compare": message = "Compare these documents: " + message
+                elif mode == "extract": message = "Extract data from: " + message
+                elif mode == "insight": message = "Generate insights for: " + message
+                initial_state["question"] = message
+
+            # Inform frontend we have started generating
+            await websocket.send_json({"type": "start"})
+
+            full_response = ""
+            try:
+                # Stream events using LangGraph
+                async for event in research_agent.astream_events(initial_state, version="v2"):
+                    event_type = event.get("event")
+                    if event_type == "on_chat_model_stream":
+                        chunk = event["data"]["chunk"]
+                        text = chunk.content
+                        if text:
+                            full_response += text
+                            await websocket.send_json({"type": "chunk", "text": text})
+            except Exception as e:
+                print(f"Error executing agent stream: {e}")
+                await websocket.send_json({"type": "error", "message": f"Execution error: {str(e)}"})
+                continue
+
+            # Save to DB if conversation is valid
+            if conversation_id and full_response:
+                add_message(conversation_id, "user", message)
+                add_message(conversation_id, "bot", full_response)
+
+            # Inform frontend generation is finished and send the complete response text
+            await websocket.send_json({"type": "end", "text": full_response})
+
+    except WebSocketDisconnect:
+        print(f"WebSocket disconnected for user: {user_id}")
+    except Exception as e:
+        print(f"WebSocket processing error: {e}")
 
 # --- 2. Main Auto-Routing Endpoint ---
 @router.post("/chat")

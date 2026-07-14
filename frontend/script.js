@@ -2,6 +2,104 @@ const API_URL = "";
 let currentMode = "chat";
 let currentConversationId = null;
 
+// WebSocket connection management variables
+let chatSocket = null;
+let activeStreamMessageId = null;
+let activeStreamText = "";
+let activeLoadingId = null;
+
+// Inject cursor typing styles dynamically
+(function injectCursorStyles() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .streaming-message > *:last-child::after {
+            content: '▋';
+            display: inline-block;
+            animation: cursorBlink 1s steps(2, start) infinite;
+            margin-left: 4px;
+            color: #8b5cf6;
+        }
+        .dark .streaming-message > *:last-child::after {
+            color: #a78bfa;
+        }
+        @keyframes cursorBlink {
+            to { visibility: hidden; }
+        }
+    `;
+    document.head.appendChild(style);
+})();
+
+function connectWebSocket() {
+    if (chatSocket && (chatSocket.readyState === WebSocket.OPEN || chatSocket.readyState === WebSocket.CONNECTING)) {
+        return;
+    }
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    let wsHost = window.location.host;
+    if (API_URL) {
+        try {
+            const urlObj = new URL(API_URL);
+            wsHost = urlObj.host;
+        } catch(e) {}
+    }
+    const wsUrl = `${protocol}//${wsHost}/tools/ws/chat`;
+    console.log("Connecting to WebSocket:", wsUrl);
+
+    chatSocket = new WebSocket(wsUrl);
+
+    chatSocket.onopen = () => {
+        console.log("WebSocket connection established");
+    };
+
+    chatSocket.onclose = (event) => {
+        console.log("WebSocket connection closed, code =", event.code, "reason =", event.reason);
+        // Do not reconnect on auth violations (HTTP status mapped to 1008 policy violation)
+        if (event.code !== 1008) {
+            setTimeout(connectWebSocket, 3000);
+        }
+    };
+
+    chatSocket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+    };
+
+    chatSocket.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === "start") {
+                if (activeLoadingId) {
+                    removeLoading(activeLoadingId);
+                    activeLoadingId = null;
+                }
+                activeStreamMessageId = "stream-" + Date.now();
+                activeStreamText = "";
+                appendBotStreamMessage(activeStreamMessageId);
+            } else if (data.type === "chunk") {
+                activeStreamText += data.text;
+                updateBotStreamMessage(activeStreamMessageId, activeStreamText, false);
+            } else if (data.type === "end") {
+                updateBotStreamMessage(activeStreamMessageId, data.text || activeStreamText, true);
+                activeStreamMessageId = null;
+                activeStreamText = "";
+            } else if (data.type === "error") {
+                if (activeLoadingId) {
+                    removeLoading(activeLoadingId);
+                    activeLoadingId = null;
+                }
+                if (activeStreamMessageId) {
+                    updateBotStreamMessage(activeStreamMessageId, "**Error:** " + data.message, true);
+                    activeStreamMessageId = null;
+                } else {
+                    appendMessage("bot", "**Error:** " + data.message);
+                }
+                showToast(data.message || "Execution error", "error");
+            }
+        } catch (e) {
+            console.error("Error processing websocket message:", e);
+        }
+    };
+}
+
 // ==========================================
 // 1. INITIALIZATION & AUTO-RESET
 // ==========================================
@@ -31,6 +129,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('login-overlay').classList.add('hidden');
 
         await loadConversations();
+        connectWebSocket();
     } catch (e) {
         console.error("Failed to load session:", e);
     }
@@ -653,39 +752,98 @@ async function sendMessage() {
     const message = inputField.value.trim();
     if (!message) return;
 
+    if (!chatSocket || chatSocket.readyState !== WebSocket.OPEN) {
+        showToast("Connecting to server... Please wait a moment and try again.", "warning");
+        connectWebSocket();
+        return;
+    }
+
     const welcome = document.getElementById("welcome-screen");
     if (welcome) welcome.remove();
 
     appendMessage("user", message);
     inputField.value = "";
-    const loadingId = appendLoading();
+    activeLoadingId = appendLoading();
 
     try {
-        const bodyData = { message: message };
-        if (currentConversationId) {
-            bodyData.conversation_id = currentConversationId;
-        }
-
-        const endpoint = `${API_URL}/tools/${currentMode}`;
-        const response = await fetch(endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(bodyData)
-        });
-        const data = await response.json();
-        removeLoading(loadingId);
-
-        if (response.ok && data.status === 200) {
-            appendMessage("bot", data.data.answer);
-        } else {
-            appendMessage("bot", "**Error:** " + (data.message || "Unknown error"));
-            showToast(data.message || "Server error", "error");
-        }
+        const payload = { 
+            message: message,
+            conversation_id: currentConversationId,
+            mode: currentMode
+        };
+        chatSocket.send(JSON.stringify(payload));
     } catch (error) {
-        removeLoading(loadingId);
+        if (activeLoadingId) {
+            removeLoading(activeLoadingId);
+            activeLoadingId = null;
+        }
         appendMessage("bot", "**Error:** Could not connect to the agent.");
-        showToast("Server error", "error");
+        showToast("Failed to send message", "error");
     }
+}
+
+function appendBotStreamMessage(id) {
+    const history = document.getElementById("chat-history");
+    const div = document.createElement("div");
+    div.id = id;
+    div.className = "msg-animate flex gap-4 max-w-4xl mx-auto";
+    div.innerHTML = `
+        <div class="w-9 h-9 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 flex items-center justify-center flex-shrink-0 shadow-md">
+            <span class="material-symbols-rounded text-lg">terminal</span>
+        </div>
+        <div class="flex-1 min-w-0 max-w-3xl">
+            <div class="message-content streaming-message glass-card border border-white/5 text-slate-200 w-full overflow-hidden px-5 py-4 rounded-2xl rounded-tl-none text-[13px] leading-relaxed prose prose-p:my-1 prose-ul:my-1 break-words">
+                <p></p>
+            </div>
+            <div class="action-panel flex justify-end mt-2 hidden">
+                <button class="download-report-btn flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-slate-400 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-brand-500/20 rounded-lg transition-all group cursor-pointer"
+                        title="Download as Markdown">
+                    <span class="material-symbols-rounded text-sm text-slate-500 group-hover:text-brand-400 transition">download</span>
+                    Download Report
+                </button>
+            </div>
+        </div>
+    `;
+    history.appendChild(div);
+    history.scrollTop = history.scrollHeight;
+    return div;
+}
+
+function updateBotStreamMessage(id, text, isDone = false) {
+    const div = document.getElementById(id);
+    if (!div) return;
+
+    const messageContentDiv = div.querySelector(".message-content");
+    const actionPanel = div.querySelector(".action-panel");
+
+    if (messageContentDiv) {
+        const processedText = prepareMarkdownText(text);
+        if (isDone) {
+            messageContentDiv.classList.remove("streaming-message");
+            messageContentDiv.innerHTML = marked.parse(processedText);
+
+            // Attach interactive styling and lightbox modal click handler to any rendered <img> elements
+            messageContentDiv.querySelectorAll("img").forEach(img => {
+                img.className = "rounded-2xl border border-slate-200 dark:border-white/10 shadow-lg my-3 max-h-80 max-w-full object-contain cursor-pointer transition-all duration-200 hover:scale-[1.015] hover:shadow-brand-500/20";
+                img.title = "Click to view full size";
+                img.onclick = () => openImageModal(img.src, img.alt);
+            });
+
+            // Show download button
+            if (actionPanel) {
+                actionPanel.classList.remove("hidden");
+                const downloadBtnEl = actionPanel.querySelector('.download-report-btn');
+                if (downloadBtnEl) {
+                    downloadBtnEl.onclick = () => downloadReportDirect(text);
+                }
+            }
+        } else {
+            messageContentDiv.innerHTML = marked.parse(processedText);
+        }
+    }
+
+    const history = document.getElementById("chat-history");
+    history.scrollTop = history.scrollHeight;
 }
 
 // ==========================================

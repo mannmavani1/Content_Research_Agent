@@ -22,12 +22,13 @@ def get_loader_for_file(file_path: str):
     ext = os.path.splitext(file_path)[1].lower()
     
     from langchain_community.document_loaders import (
-        PyPDFLoader, Docx2txtLoader, TextLoader, UnstructuredExcelLoader, UnstructuredPowerPointLoader, UnstructuredMarkdownLoader
+        PyPDFLoader, Docx2txtLoader, TextLoader, UnstructuredExcelLoader, UnstructuredPowerPointLoader, UnstructuredMarkdownLoader, CSVLoader
     )
     
     if ext == ".pdf": return PyPDFLoader(file_path)
     elif ext == ".docx": return Docx2txtLoader(file_path)
     elif ext == ".txt": return TextLoader(file_path, encoding="utf-8")
+    elif ext == ".csv": return CSVLoader(file_path)
     elif ext == ".md": return UnstructuredMarkdownLoader(file_path)
     elif ext in [".xlsx", ".xls"]: return UnstructuredExcelLoader(file_path, mode="elements")
     elif ext == ".pptx": return UnstructuredPowerPointLoader(file_path, mode="elements")
