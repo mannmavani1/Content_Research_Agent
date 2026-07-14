@@ -1,30 +1,15 @@
 import os
 import shutil
-# pyrefly: ignore [missing-import]
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores.utils import filter_complex_metadata
-from backend.database.database import add_documents, init_db
+from backend.database.database import add_documents, add_triplets
 from backend.config.settings import settings
 
 def get_loader_for_file(file_path: str):
-    """
-    Factory function to select the appropriate LangChain document loader based on file extension.
-
-    Args:
-        file_path (str): The absolute path to the file on disk.
-
-    Returns:
-        BaseLoader: An instantiated loader object ready to call `.load()`.
-
-    Raises:
-        ValueError: If the file extension is not supported (currently supports: pdf, docx, txt, xlsx, xls, pptx).
-    """
     ext = os.path.splitext(file_path)[1].lower()
-    
     from langchain_community.document_loaders import (
         PyPDFLoader, Docx2txtLoader, TextLoader, UnstructuredExcelLoader, UnstructuredPowerPointLoader, UnstructuredMarkdownLoader, CSVLoader
     )
-    
     if ext == ".pdf": return PyPDFLoader(file_path)
     elif ext == ".docx": return Docx2txtLoader(file_path)
     elif ext == ".txt": return TextLoader(file_path, encoding="utf-8")
@@ -35,10 +20,6 @@ def get_loader_for_file(file_path: str):
     else: raise ValueError(f"Unsupported file type: {ext}")
 
 def extract_triplets_from_text(text: str) -> list:
-    """
-    Invokes Groq LLM to extract entity-relationship-entity triplets from the text.
-    Returns a list of tuples: (subject, predicate, object)
-    """
     from backend.services.llm import get_llm
     from langchain_core.prompts import PromptTemplate
     import re
@@ -66,10 +47,7 @@ def extract_triplets_from_text(text: str) -> list:
     chain = prompt | llm
     try:
         response = chain.invoke({"text": text})
-        # Extract content text from message or get string
         response_text = getattr(response, "content", str(response))
-        
-        # Regex to locate the JSON array block
         match = re.search(r'\[\s*\{.*\}\s*\]', response_text, re.DOTALL)
         if not match:
             match = re.search(r'\{.*\}', response_text, re.DOTALL)
@@ -93,12 +71,7 @@ def extract_triplets_from_text(text: str) -> list:
         print(f"Failed to extract triplets: {e}")
         return []
 
-
 def extract_and_caption_pdf_images(file_path: str) -> list:
-    """
-    Extracts embedded images from a PDF, captions them using the Groq Vision API,
-    and returns a list of Document objects representing those visual components.
-    """
     import fitz
     from langchain_core.documents import Document
     from backend.services.multimodal.image_processor import caption_image_with_vision
@@ -145,7 +118,7 @@ def extract_and_caption_pdf_images(file_path: str) -> list:
                         }
                     ))
                     image_count += 1
-                    if image_count >= 15: # Safety cap
+                    if image_count >= 15:
                         print("Reached maximum image extraction limit (15 images). Skipping remaining images.")
                         break
                 except Exception as e:
@@ -162,22 +135,7 @@ def extract_and_caption_pdf_images(file_path: str) -> list:
         
     return doc_chunks
 
-
-def process_document(file_path: str, conversation_id: int = None) -> int:
-    """
-    Orchestrates the complete ingestion pipeline for a single document or media file.
-
-    Steps:
-    1. **Load/Route**: Decides pipeline based on file type.
-    2. **Process/Extract**: Runs OCR/Captioning, Speech-to-text, or Frame extraction.
-    3. **Store**: Indexes parsed content chunks, vector embeddings, and relational metadata.
-
-    Args:
-        file_path (str): Path to the uploaded file.
-
-    Returns:
-        int: The total number of chunks created and indexed.
-    """
+async def process_document(file_path: str, workspace_id: int, conversation_id: int = None) -> int:
     ext = os.path.splitext(file_path)[1].lower()
     from langchain_core.documents import Document
     
@@ -227,14 +185,14 @@ def process_document(file_path: str, conversation_id: int = None) -> int:
         for split in splits:
             split.metadata["conversation_id"] = conversation_id
 
-    # 3. Store in SQLite
-    inserted_ids = add_documents(splits)
-    print(f"Added {len(splits)} chunks to local SQLite documents table")
+    # 3. Store in Postgres
+    inserted_ids = await add_documents(splits, workspace_id)
+    print(f"Added {len(splits)} chunks to local Postgres documents table")
     
     # 4. Store in Chroma Vector Store
     try:
         from backend.database.vector_db import add_documents_to_vector_store
-        add_documents_to_vector_store(splits, conversation_id)
+        add_documents_to_vector_store(splits, workspace_id)
         print("Indexed chunks into vector store")
     except Exception as e:
         print(f"Failed to save to vector store: {e}")
@@ -242,28 +200,17 @@ def process_document(file_path: str, conversation_id: int = None) -> int:
     # 5. Extract and Store Knowledge Graph triplets (GraphRAG)
     if conversation_id is not None:
         print("Extracting knowledge graph triplets...")
-        from backend.database.database import add_triplets
         # Extract triplets for up to 30 chunks to prevent rate limits
         for i, split in enumerate(splits[:30]):
             chunk_id = inserted_ids[i] if i < len(inserted_ids) else None
             triplets = extract_triplets_from_text(split.page_content)
             if triplets:
-                add_triplets(triplets, conversation_id, chunk_id)
+                await add_triplets(triplets, conversation_id, chunk_id)
         print(f"Graph extraction completed.")
     
     return len(splits)
 
-def reset_database(conversation_id: int = None):
-    """
-    Performs a hard reset of the system's memory for a specific conversation.
-
-    This function is destructive:
-    1. Deletes the physical `uploads` directory to remove raw files.
-    2. Re-creates the `uploads` directory.
-    3. Deletes the local SQLite database file to clear all indexed records.
-    
-    Used primarily for testing or when the user wants to start a fresh session.
-    """
+async def reset_database(workspace_id: int):
     print("Resetting database...")
     try:
         # Physical cleanup
@@ -273,13 +220,13 @@ def reset_database(conversation_id: int = None):
 
         # Database cleanup
         from backend.database.database import delete_all_documents
-        delete_all_documents(conversation_id)
+        await delete_all_documents(workspace_id)
         print("Cleared documents table.")
         
         # Vector store cleanup
         try:
             from backend.database.vector_db import delete_all_vector_store_documents
-            delete_all_vector_store_documents(conversation_id)
+            delete_all_vector_store_documents(workspace_id)
             print("Cleared vector store.")
         except Exception as e:
             print(f"Failed to clear vector store: {e}")

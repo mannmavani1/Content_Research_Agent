@@ -8,7 +8,7 @@ from backend.schemas.api_models import PasteRequest, StandardResponse
 from backend.utils.responses import success_response
 from backend.services.ingestion import process_document, reset_database
 from backend.utils.dependencies import get_current_user
-from backend.database.database import verify_conversation_owner
+from backend.database.database import verify_conversation_owner, delete_document_chunks, get_files_for_workspace
 
 router = APIRouter(
     prefix="/ingestion", 
@@ -16,12 +16,12 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)]
 )
 
-def get_user_id(current_user: dict) -> str:
-    """Helper to extract unique user identifier from JWT payload."""
-    user_id = current_user.get("id") or current_user.get("email")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="User identity could not be established.")
-    return str(user_id)
+def get_workspace_id(current_user: dict) -> int:
+    """Helper to extract workspace identifier from JWT payload."""
+    workspace_id = current_user.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(status_code=401, detail="Workspace identity could not be established.")
+    return int(workspace_id)
 
 @router.post("/upload", response_model=StandardResponse)
 async def upload_file(
@@ -32,8 +32,8 @@ async def upload_file(
     """
     Handles file uploads and triggers the indexing process.
     """
-    user_id = get_user_id(current_user)
-    if conversation_id and not verify_conversation_owner(conversation_id, user_id):
+    workspace_id = get_workspace_id(current_user)
+    if conversation_id and not await verify_conversation_owner(conversation_id, workspace_id):
         raise HTTPException(status_code=403, detail="Access denied to this conversation.")
 
     file_path = os.path.join(settings.UPLOAD_DIR, file.filename)
@@ -42,7 +42,7 @@ async def upload_file(
         shutil.copyfileobj(file.file, buffer)
     
     try:
-        num_chunks = process_document(file_path, conversation_id=conversation_id)
+        num_chunks = await process_document(file_path, workspace_id, conversation_id=conversation_id)
         return success_response(
             message="File successfully indexed",
             data={
@@ -60,8 +60,8 @@ async def paste_content(request: PasteRequest, current_user: dict = Depends(get_
     """
     Accepts raw text input and treats it as a file for indexing.
     """
-    user_id = get_user_id(current_user)
-    if request.conversation_id and not verify_conversation_owner(request.conversation_id, user_id):
+    workspace_id = get_workspace_id(current_user)
+    if request.conversation_id and not await verify_conversation_owner(request.conversation_id, workspace_id):
         raise HTTPException(status_code=403, detail="Access denied to this conversation.")
 
     if not request.text.strip():
@@ -76,7 +76,7 @@ async def paste_content(request: PasteRequest, current_user: dict = Depends(get_
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(request.text)
             
-        num_chunks = process_document(file_path, conversation_id=request.conversation_id)
+        num_chunks = await process_document(file_path, workspace_id, conversation_id=request.conversation_id)
         return success_response(
             message="Pasted content successfully indexed",
             data={
@@ -90,16 +90,16 @@ async def paste_content(request: PasteRequest, current_user: dict = Depends(get_
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/reset")
-def reset_database_router(conversation_id: Optional[int] = None, current_user: dict = Depends(get_current_user)):
+async def reset_database_router(conversation_id: Optional[int] = None, current_user: dict = Depends(get_current_user)):
     """
-    Clears the entire local database or only for a specific conversation.
+    Clears the workspace documents and vectors.
     """
-    user_id = get_user_id(current_user)
-    if conversation_id and not verify_conversation_owner(conversation_id, user_id):
+    workspace_id = get_workspace_id(current_user)
+    if conversation_id and not await verify_conversation_owner(conversation_id, workspace_id):
         raise HTTPException(status_code=403, detail="Access denied to this conversation.")
 
     try:
-        reset_database(conversation_id)
+        await reset_database(workspace_id)
         return success_response(message="Database reset complete")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -107,10 +107,10 @@ def reset_database_router(conversation_id: Optional[int] = None, current_user: d
 @router.delete("/file", response_model=StandardResponse)
 async def delete_file(filename: str, conversation_id: Optional[int] = None, current_user: dict = Depends(get_current_user)):
     """
-    Deletes a specific file physically and removes its chunks from the SQLite database.
+    Deletes a specific file physically and removes its chunks from the database.
     """
-    user_id = get_user_id(current_user)
-    if conversation_id and not verify_conversation_owner(conversation_id, user_id):
+    workspace_id = get_workspace_id(current_user)
+    if conversation_id and not await verify_conversation_owner(conversation_id, workspace_id):
         raise HTTPException(status_code=403, detail="Access denied to this conversation.")
 
     if not filename.strip():
@@ -128,8 +128,10 @@ async def delete_file(filename: str, conversation_id: Optional[int] = None, curr
             
     # 2. Database chunks delete
     try:
-        from backend.database.database import delete_document_chunks
-        chunks_deleted = delete_document_chunks(filename, conversation_id=conversation_id)
+        chunks_deleted = await delete_document_chunks(filename, workspace_id=workspace_id)
+        # Also clean vector store
+        from backend.database.vector_db import delete_vector_store_documents
+        delete_vector_store_documents(filename, workspace_id=workspace_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to remove database records: {str(e)}")
         
@@ -147,15 +149,14 @@ async def delete_file(filename: str, conversation_id: Optional[int] = None, curr
 @router.get("/files/{conversation_id}", response_model=StandardResponse)
 async def get_files(conversation_id: int = Path(...), current_user: dict = Depends(get_current_user)):
     """
-    Fetches the list of filenames active in the specified conversation.
+    Fetches the list of filenames active in the specified workspace.
     """
-    user_id = get_user_id(current_user)
-    if not verify_conversation_owner(conversation_id, user_id):
+    workspace_id = get_workspace_id(current_user)
+    if not await verify_conversation_owner(conversation_id, workspace_id):
         raise HTTPException(status_code=403, detail="Access denied to this conversation.")
 
     try:
-        from backend.database.database import get_files_for_conversation
-        files = get_files_for_conversation(conversation_id)
+        files = await get_files_for_workspace(workspace_id)
         return success_response(
             message="Files fetched successfully",
             data={"files": files}

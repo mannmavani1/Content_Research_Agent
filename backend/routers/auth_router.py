@@ -4,6 +4,7 @@ from backend.config.settings import settings
 from workos import WorkOSClient
 import jwt
 from datetime import datetime, timedelta, timezone
+from backend.database.database import get_or_create_user, get_user_workspace
 
 # Initialize WorkOS client using the v9+ SDK
 workos_client = WorkOSClient(
@@ -59,18 +60,29 @@ async def callback(code: str):
         auth_response = workos_client.user_management.authenticate_with_code(
             code=code,
         )
-        user = auth_response.user
+        workos_user = auth_response.user
         access_token = auth_response.access_token
 
         # Extract WorkOS session ID from the access token to enable session revocation later
         session_id = get_workos_session_id_from_token(access_token)
 
-        # Create JWT token for our session, storing the WorkOS session ID
+        # Sync user with database and fetch workspace
+        db_user = await get_or_create_user(
+            workos_id=workos_user.id,
+            email=workos_user.email,
+            first_name=workos_user.first_name,
+            last_name=workos_user.last_name
+        )
+        workspace = await get_user_workspace(db_user.id)
+
+        # Create JWT token for our session
         user_data = {
-            "id": user.id,
-            "email": user.email,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
+            "id": db_user.id,
+            "workos_id": workos_user.id,
+            "email": db_user.email,
+            "first_name": db_user.first_name,
+            "last_name": db_user.last_name,
+            "workspace_id": workspace.id if workspace else None,
             "workos_session_id": session_id,  # Stored to allow proper session revocation
         }
         token = create_jwt_token(user_data)

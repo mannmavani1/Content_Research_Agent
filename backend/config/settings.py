@@ -35,7 +35,7 @@ class Settings:
     
     LLM_MODEL: str = "llama-3.3-70b-versatile"
     RETRIEVAL_STRATEGY: str = "vectorless"
-    LOCAL_DB_PATH: str = os.path.join(LOCAL_DB_DIR, "documents.db")
+    POSTGRES_URL: str = os.getenv("DB_URL", "postgresql+asyncpg://localhost:5432/content_agent")
 
     WORKOS_CLIENT_ID: str = os.getenv("WORKOS_CLIENT_ID", "")
     WORKOS_API_KEY: str = os.getenv("WORKOS_API_KEY", "")

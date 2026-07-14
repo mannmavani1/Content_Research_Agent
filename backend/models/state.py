@@ -32,5 +32,7 @@ class AgentState(TypedDict):
     generation: str
     
     conversation_id: int
+    
+    workspace_id: int
 
     needs_search: bool

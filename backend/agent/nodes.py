@@ -57,7 +57,7 @@ async def router_node(state: AgentState):
 
     return {"generation": category}
 
-def retrieve_node(state: AgentState):
+async def retrieve_node(state: AgentState):
     """
     Queries the vectorless database to retrieve relevant document chunks or multimodal segments.
 
@@ -67,8 +67,11 @@ def retrieve_node(state: AgentState):
     Returns:
         dict: A dictionary with the 'documents' key containing formatted visual/text/audio context.
     """
-    retriever = get_retriever(conversation_id=state.get("conversation_id"))
-    docs = retriever.invoke(state["question"])
+    retriever = get_retriever(
+        conversation_id=state.get("conversation_id"), 
+        workspace_id=state.get("workspace_id")
+    )
+    docs = await retriever.ainvoke(state["question"])
     formatted_docs = []
     
     for d in docs:
