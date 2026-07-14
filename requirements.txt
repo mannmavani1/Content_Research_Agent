@@ -173,3 +173,6 @@ Markdown==3.10.2
 markdown-it-py==4.0.0
 workos>=5.0.0
 PyJWT>=2.0.0
+chromadb
+sentence-transformers
+langchain-huggingface

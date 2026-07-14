@@ -83,6 +83,19 @@ def init_db():
                 FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
             )
         """)
+
+        # Table for storing Knowledge Graph Triplets (GraphRAG)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS knowledge_graph (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject TEXT NOT NULL,
+                predicate TEXT NOT NULL,
+                object TEXT NOT NULL,
+                chunk_id INTEGER,
+                conversation_id INTEGER NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+            )
+        """)
         
         conn.commit()
 
@@ -137,7 +150,7 @@ def delete_conversation(conversation_id: int, user_id: str = None):
         if user_id is not None:
             cursor.execute("DELETE FROM conversations WHERE id = ? AND user_id = ?", (conversation_id, user_id))
         else:
-            cursor.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+            cursor.execute("DELETE TABLE conversations WHERE id = ?", (conversation_id,))
         conn.commit()
 
 def rename_conversation(conversation_id: int, new_title: str, user_id: str = None):
@@ -180,15 +193,19 @@ def get_messages(conversation_id: int, user_id: str = None) -> list:
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
-def add_documents(documents):
+def add_documents(documents) -> list:
     """
     Adds a list of document chunks to the database.
     
     Args:
         documents: A list of Langchain Document objects.
+        
+    Returns:
+        List of inserted document IDs.
     """
     init_db()  # Ensure tables exist
     
+    inserted_ids = []
     with get_db_connection() as conn:
         cursor = conn.cursor()
         for doc in documents:
@@ -198,7 +215,55 @@ def add_documents(documents):
                 "INSERT INTO documents (content, metadata) VALUES (?, ?)",
                 (content, metadata_str)
             )
+            inserted_ids.append(cursor.lastrowid)
         conn.commit()
+    return inserted_ids
+
+def add_triplets(triplets: list, conversation_id: int, chunk_id: int = None):
+    """
+    Adds a list of (subject, predicate, object) triplets to the knowledge graph SQLite table.
+    """
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        for s, p, o in triplets:
+            cursor.execute(
+                "INSERT INTO knowledge_graph (subject, predicate, object, chunk_id, conversation_id) VALUES (?, ?, ?, ?, ?)",
+                (s, p, o, chunk_id, conversation_id)
+            )
+        conn.commit()
+
+def search_knowledge_graph(query: str, conversation_id: int, limit: int = 15) -> list:
+    """
+    Queries the knowledge graph SQLite table for triplets matching terms in the query.
+    """
+    init_db()
+    import re
+    tokens = re.findall(r'\b\w{3,}\b', query.lower()) # words of length >= 3
+    if not tokens:
+        return []
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        # Search for tokens matching subject or object
+        conditions = []
+        params = [conversation_id]
+        for token in tokens:
+            conditions.append("LOWER(subject) LIKE ?")
+            conditions.append("LOWER(object) LIKE ?")
+            params.append(f"%{token}%")
+            params.append(f"%{token}%")
+        
+        where_clause = " OR ".join(conditions)
+        sql = f"""
+            SELECT subject, predicate, object 
+            FROM knowledge_graph 
+            WHERE conversation_id = ? AND ({where_clause})
+            LIMIT ?
+        """
+        cursor.execute(sql, params + [limit])
+        rows = cursor.fetchall()
+        return [f"({row['subject']} --[{row['predicate']}]--> {row['object']})" for row in rows]
 
 def search_documents(query: str, conversation_id: int = None, k: int = 5):
     """
@@ -308,6 +373,7 @@ def delete_document_chunks(filename: str, conversation_id: int = None) -> int:
         if ids_to_delete:
             placeholders = ",".join("?" for _ in ids_to_delete)
             cursor.execute(f"DELETE FROM documents WHERE id IN ({placeholders})", ids_to_delete)
+            cursor.execute(f"DELETE FROM knowledge_graph WHERE chunk_id IN ({placeholders})", ids_to_delete)
             conn.commit()
             return len(ids_to_delete)
         return 0
@@ -328,8 +394,10 @@ def delete_all_documents(conversation_id: int = None):
             if ids_to_delete:
                 placeholders = ",".join("?" for _ in ids_to_delete)
                 cursor.execute(f"DELETE FROM documents WHERE id IN ({placeholders})", ids_to_delete)
+            cursor.execute("DELETE FROM knowledge_graph WHERE conversation_id = ?", (conversation_id,))
         else:
             cursor.execute("DELETE FROM documents")
+            cursor.execute("DELETE FROM knowledge_graph")
         conn.commit()
 
 def get_files_for_conversation(conversation_id: int) -> list:
