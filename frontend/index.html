@@ -173,6 +173,22 @@
         }
         .msg-animate { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
+        /* Elegant AI Core Animations */
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-12px); }
+        }
+        @keyframes slide {
+            0% { top: 0%; opacity: 0; }
+            20% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(1.3); opacity: 0; }
+        }
+
         /* Custom scrollbar remover for horizontal menu */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -369,6 +385,60 @@
                     <p style="color:#94a3b8;font-size:11px;text-align:center;margin-top:28px;line-height:1.6;" class="dark:text-slate-500">
                         By continuing, you agree to our Terms of Service & Privacy Policy.
                     </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Central Elegant AI Core Animation -->
+        <div class="hidden lg:flex absolute top-1/2 left-[42%] -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none items-center justify-center">
+            
+            <!-- Minimal Vertical Spine / Scanner -->
+            <div class="absolute w-[1px] h-[1000px] bg-gradient-to-b from-transparent via-brand-500/20 to-transparent">
+                <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[3px] h-48 bg-gradient-to-b from-transparent via-brand-400 to-transparent blur-[1px] animate-[slide_4s_ease-in-out_infinite]"></div>
+            </div>
+
+            <div class="relative flex items-center justify-center">
+                <!-- Ambient Backdrop Glow -->
+                <div class="absolute w-[500px] h-[500px] bg-brand-600/10 dark:bg-brand-500/15 rounded-full blur-[100px] animate-pulse"></div>
+
+                <!-- Gyroscope Rings -->
+                <div class="absolute w-[360px] h-[360px] rounded-full border-[2px] border-brand-500/10 border-t-brand-400/70 animate-[spin_10s_linear_infinite]"></div>
+                <div class="absolute w-[280px] h-[280px] rounded-full border-[1.5px] border-indigo-500/10 border-b-indigo-400/60 animate-[spin_7s_linear_infinite_reverse] scale-y-[0.6] -rotate-45"></div>
+                <div class="absolute w-[200px] h-[200px] rounded-full border-[1px] border-purple-500/10 border-r-purple-400/60 animate-[spin_12s_linear_infinite] scale-x-[0.6] rotate-45"></div>
+                
+                <!-- Expanding Pulse Rings -->
+                <div class="absolute inset-0 m-auto w-[140px] h-[140px] border-2 border-brand-500/30 rounded-full animate-[pulse-ring_3s_cubic-bezier(0.4,0,0.6,1)_infinite]"></div>
+                <div class="absolute inset-0 m-auto w-[140px] h-[140px] border-2 border-indigo-500/30 rounded-full animate-[pulse-ring_3s_cubic-bezier(0.4,0,0.6,1)_infinite_1.5s]"></div>
+
+                <!-- Center Glass Orb -->
+                <div class="relative z-10 w-[140px] h-[140px] bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl rounded-[40px] shadow-[0_16px_60px_rgba(139,92,246,0.3)] border border-white/40 dark:border-white/10 flex items-center justify-center transform hover:scale-105 transition-transform duration-500">
+                    <div class="absolute inset-0 bg-gradient-to-br from-brand-500/10 to-indigo-500/10 rounded-[40px] pointer-events-none"></div>
+                    <span class="material-symbols-rounded text-[64px] bg-clip-text text-transparent bg-gradient-to-r from-brand-500 to-indigo-400 animate-pulse drop-shadow-[0_0_20px_rgba(139,92,246,0.5)]">psychology</span>
+                </div>
+
+                <!-- Floating Agent Badges (Pills) -->
+                <div class="absolute -top-32 -left-48 animate-[float_5s_ease-in-out_infinite]">
+                    <div class="flex items-center gap-3 px-5 py-2.5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-full border border-slate-200 dark:border-white/10 shadow-[0_10px_30px_rgba(52,211,153,0.1)]">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-pulse"></span>
+                        <span class="material-symbols-rounded text-emerald-500 text-lg">document_scanner</span>
+                        <span class="text-xs font-bold text-slate-700 dark:text-slate-200 tracking-widest uppercase">Indexing Phase</span>
+                    </div>
+                </div>
+
+                <div class="absolute top-0 -right-32 animate-[float_6s_ease-in-out_infinite_1.5s]">
+                    <div class="flex items-center gap-3 px-5 py-2.5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-full border border-slate-200 dark:border-white/10 shadow-[0_10px_30px_rgba(167,139,250,0.1)]">
+                        <span class="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_12px_#a78bfa] animate-pulse"></span>
+                        <span class="material-symbols-rounded text-purple-500 text-lg">auto_fix_high</span>
+                        <span class="text-xs font-bold text-slate-700 dark:text-slate-200 tracking-widest uppercase">Synthesizing</span>
+                    </div>
+                </div>
+
+                <div class="absolute -bottom-36 -left-36 animate-[float_5.5s_ease-in-out_infinite_3s]">
+                    <div class="flex items-center gap-3 px-5 py-2.5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-full border border-slate-200 dark:border-white/10 shadow-[0_10px_30px_rgba(96,165,250,0.1)]">
+                        <span class="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_12px_#60a5fa] animate-pulse"></span>
+                        <span class="material-symbols-rounded text-blue-500 text-lg">travel_explore</span>
+                        <span class="text-xs font-bold text-slate-700 dark:text-slate-200 tracking-widest uppercase">Correlating Data</span>
+                    </div>
                 </div>
             </div>
         </div>
