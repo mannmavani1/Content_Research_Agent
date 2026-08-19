@@ -53,7 +53,7 @@ def process_audio_file(file_path: str) -> list:
             }
             
             print(f"Sending {filename} to Groq Whisper for transcription...")
-            res = requests.post(url, headers=headers, files=files, data=data)
+            res = requests.post(url, headers=headers, files=files, data=data, timeout=25)
             
             if res.status_code != 200:
                 raise Exception(f"Groq Whisper transcription failed: {res.text}")

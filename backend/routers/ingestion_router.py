@@ -1,14 +1,20 @@
 import os
 import shutil
 import time
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Path, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Path, Depends, BackgroundTasks
 from typing import Optional
 from backend.config.settings import settings
 from backend.schemas.api_models import PasteRequest, StandardResponse
 from backend.utils.responses import success_response
-from backend.services.ingestion import process_document, reset_database
+from backend.services.ingestion import process_document, process_document_background, reset_database
 from backend.utils.dependencies import get_current_user
-from backend.database.database import verify_conversation_owner, delete_document_chunks, get_files_for_workspace
+from backend.database.database import (
+    verify_conversation_owner,
+    delete_document_chunks,
+    get_files_for_workspace,
+    create_document_task,
+    get_document_task
+)
 
 router = APIRouter(
     prefix="/ingestion", 
@@ -25,29 +31,39 @@ def get_workspace_id(current_user: dict) -> int:
 
 @router.post("/upload", response_model=StandardResponse)
 async def upload_file(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...), 
     conversation_id: Optional[int] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Handles file uploads and triggers the indexing process.
+    Handles file uploads and enqueues indexing as a background task.
     """
     workspace_id = get_workspace_id(current_user)
     if conversation_id and not await verify_conversation_owner(conversation_id, workspace_id):
         raise HTTPException(status_code=403, detail="Access denied to this conversation.")
 
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     file_path = os.path.join(settings.UPLOAD_DIR, file.filename)
     
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
     try:
-        num_chunks = await process_document(file_path, workspace_id, conversation_id=conversation_id)
+        task_id = await create_document_task(workspace_id, file.filename, conversation_id=conversation_id)
+        background_tasks.add_task(
+            process_document_background,
+            task_id,
+            file_path,
+            workspace_id,
+            conversation_id
+        )
         return success_response(
-            message="File successfully indexed",
+            message="File upload accepted and processing in background",
             data={
+                "task_id": task_id,
                 "filename": file.filename,
-                "chunks_processed": num_chunks
+                "status": "PENDING"
             }
         )
     except Exception as e:
@@ -56,9 +72,13 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/paste", response_model=StandardResponse)
-async def paste_content(request: PasteRequest, current_user: dict = Depends(get_current_user)):
+async def paste_content(
+    request: PasteRequest,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user)
+):
     """
-    Accepts raw text input and treats it as a file for indexing.
+    Accepts raw text input and enqueues indexing as a background task.
     """
     workspace_id = get_workspace_id(current_user)
     if request.conversation_id and not await verify_conversation_owner(request.conversation_id, workspace_id):
@@ -70,24 +90,49 @@ async def paste_content(request: PasteRequest, current_user: dict = Depends(get_
     timestamp = int(time.time())
     base_name = request.filename if request.filename else "pasted_content"
     clean_filename = f"{base_name}_{timestamp}.txt"
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     file_path = os.path.join(settings.UPLOAD_DIR, clean_filename)
 
     try:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(request.text)
             
-        num_chunks = await process_document(file_path, workspace_id, conversation_id=request.conversation_id)
+        task_id = await create_document_task(workspace_id, clean_filename, conversation_id=request.conversation_id)
+        background_tasks.add_task(
+            process_document_background,
+            task_id,
+            file_path,
+            workspace_id,
+            request.conversation_id
+        )
         return success_response(
-            message="Pasted content successfully indexed",
+            message="Pasted content accepted and processing in background",
             data={
+                "task_id": task_id,
                 "filename": clean_filename,
-                "chunks_processed": num_chunks
+                "status": "PENDING"
             }
         )
     except Exception as e:
         if os.path.exists(file_path): 
             os.remove(file_path)
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/status/{task_id}", response_model=StandardResponse)
+async def get_task_status(task_id: int, current_user: dict = Depends(get_current_user)):
+    """
+    Polls the processing status of a background ingestion task.
+    """
+    workspace_id = get_workspace_id(current_user)
+    task = await get_document_task(task_id, workspace_id=workspace_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return success_response(
+        message=f"Task is {task['status']}",
+        data=task
+    )
+
 
 @router.post("/reset")
 async def reset_database_router(conversation_id: Optional[int] = None, current_user: dict = Depends(get_current_user)):

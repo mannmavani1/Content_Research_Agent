@@ -17,9 +17,10 @@ def get_vision_llm():
     if _vision_llm is None:
         api_key = os.getenv("GROQ_API_KEY")
         _vision_llm = ChatGroq(
-            model=os.getenv("VISION_MODEL", "qwen/qwen3.6-27b"),
+            model=os.getenv("VISION_MODEL", "llama-3.2-90b-vision-preview"),
             temperature=0.1,
-            max_retries=2,
+            max_retries=1,
+            timeout=8,
             api_key=api_key
         )
     return _vision_llm
@@ -50,71 +51,49 @@ def get_captioner():
 
 def caption_image_with_gemini(image_path: str) -> str:
     """
-    Uses Google Gemini Flash Vision model to generate rich multimodal descriptions, charts, and text.
+    Uses Google Gemini Vision models (primary: gemini-3.7-flash) to generate rich multimodal descriptions.
     """
     gemini_key = os.getenv("GEMINI_API_KEY")
     if not gemini_key:
         raise ValueError("GEMINI_API_KEY not configured")
 
-    import google.generativeai as genai
-    genai.configure(api_key=gemini_key)
-    
-    model = genai.GenerativeModel("gemini-2.5-flash")
-    with Image.open(image_path) as img:
-        response = model.generate_content([
-            "Analyze this image and provide a concise, structured, and detailed description of its contents. "
-            "Transcribe all visible text, UI components, data tables, metrics, and trends accurately in Markdown format.",
-            img
-        ])
-        return response.text.strip()
-
-def caption_image_with_groq(image_path: str) -> str:
-    """
-    Sends a local image to Groq's Vision API and gets a description.
-    """
-    import re
-    # Get image format/extension for MIME type mapping
-    try:
-        with Image.open(image_path) as img:
-            img_format = img.format or "JPEG"
-    except Exception:
-        img_format = "JPEG"
-        
-    mime_type = "image/jpeg"
-    fmt = img_format.lower()
-    if fmt == "png":
-        mime_type = "image/png"
-    elif fmt == "webp":
-        mime_type = "image/webp"
-    elif fmt == "gif":
-        mime_type = "image/gif"
-        
-    with open(image_path, "rb") as f:
-        img_bytes = f.read()
-    base64_image = base64.b64encode(img_bytes).decode("utf-8")
-    
-    llm = get_vision_llm()
     prompt = (
-        "Analyze this image and provide a concise, detailed description of its contents. "
-        "Transcribe any visible text or data trends."
+        "Analyze this image and provide a concise, structured description of its contents. "
+        "Transcribe all visible text, UI components, data tables, metrics, and trends accurately in Markdown format."
     )
-    
-    message = HumanMessage(
-        content=[
-            {"type": "text", "text": prompt},
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:{mime_type};base64,{base64_image}"
-                }
-            }
-        ]
-    )
-    
-    response = llm.invoke([message])
-    content = getattr(response, "content", str(response)).strip()
-    clean_content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
-    return clean_content
+
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=gemini_key)
+    # Active tested vision models with independent quotas
+    models_to_try = ["gemini-3.7-flash", "gemini-2.5-flash-lite", "gemini-3.6-flash"]
+    last_err = None
+
+    for model_name in models_to_try:
+        try:
+            with Image.open(image_path) as img:
+                chat = client.chats.create(model=model_name)
+                response_stream = chat.send_message_stream(
+                    message=[img, prompt],
+                    config=types.GenerateContentConfig(
+                        temperature=0.1
+                    )
+                )
+                collected_text = []
+                for chunk in response_stream:
+                    if chunk and chunk.text:
+                        collected_text.append(chunk.text)
+                
+                full_text = "".join(collected_text).strip()
+                if full_text:
+                    return full_text
+        except Exception as e:
+            last_err = e
+            print(f"{model_name} note ({e}). Trying next Gemini model...")
+            continue
+
+    raise Exception(f"All Gemini models failed: {last_err}")
 
 def extract_text_via_local_ocr(image_path: str) -> str:
     """
@@ -133,9 +112,8 @@ def extract_text_via_local_ocr(image_path: str) -> str:
 def caption_image_with_vision(image_path: str) -> str:
     """
     Multi-provider vision pipeline:
-    1. Primary: Google Gemini 2.5 Flash Vision (High rate limits, deep multimodal reasoning)
-    2. Secondary: Groq Vision (Qwen 2.5-VL / Qwen 3.6-27B)
-    3. Tertiary: Local Native Apple Vision OCR (100% offline fallback)
+    1. Primary: Google Gemini Vision (gemini-3.7-flash -> gemini-2.5-flash-lite -> gemini-3.6-flash)
+    2. Fallback: Native Apple Vision OCR (100% offline, zero-latency fallback)
     """
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Image file not found: {image_path}")
@@ -146,16 +124,9 @@ def caption_image_with_vision(image_path: str) -> str:
             print(f"Analyzing {os.path.basename(image_path)} using Google Gemini Vision API...")
             return caption_image_with_gemini(image_path)
         except Exception as e:
-            print(f"Gemini Vision API notice ({e}). Trying Groq Vision...")
+            print(f"Gemini Vision API notice ({e}). Using Native Apple Vision OCR fallback...")
 
-    # Tier 2: Groq Vision
-    try:
-        print(f"Analyzing {os.path.basename(image_path)} using Groq Vision API...")
-        return caption_image_with_groq(image_path)
-    except Exception as e:
-        print(f"Groq Vision API notice ({e}). Using Native Apple Vision OCR fallback...")
-
-    # Tier 3: Native Offline OCR
+    # Tier 2: Native Offline OCR
     return extract_text_via_local_ocr(image_path)
 
 def process_image_file(file_path: str) -> list:

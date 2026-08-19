@@ -78,3 +78,18 @@ class KnowledgeGraph(Base):
     chunk_id = Column(Integer, ForeignKey('documents.id', ondelete='SET NULL'), nullable=True)
 
     conversation = relationship("Conversation", back_populates="knowledge_graph")
+
+
+class DocumentTask(Base):
+    __tablename__ = 'document_tasks'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(Integer, ForeignKey('workspaces.id', ondelete='CASCADE'), nullable=False)
+    conversation_id = Column(Integer, ForeignKey('conversations.id', ondelete='SET NULL'), nullable=True)
+    filename = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="PENDING")  # PENDING, PROCESSING, COMPLETED, FAILED
+    error_message = Column(Text, nullable=True)
+    chunks_processed = Column(Integer, nullable=True, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+

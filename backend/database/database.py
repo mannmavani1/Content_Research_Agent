@@ -6,7 +6,7 @@ from sqlalchemy import select, insert, update, delete, func, text, or_
 from sqlalchemy.orm import selectinload
 
 from backend.config.settings import settings
-from backend.database.models import User, Workspace, Conversation, Message, Document, KnowledgeGraph
+from backend.database.models import User, Workspace, Conversation, Message, Document, KnowledgeGraph, DocumentTask
 
 engine = create_async_engine(settings.POSTGRES_URL, echo=False)
 AsyncSessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
@@ -269,4 +269,55 @@ async def get_files_for_workspace(workspace_id: int, conversation_id: int = None
 
 async def get_files_for_conversation(workspace_id: int, conversation_id: int) -> list:
     return await get_files_for_workspace(workspace_id, conversation_id=conversation_id)
+
+
+async def create_document_task(workspace_id: int, filename: str, conversation_id: int = None) -> int:
+    async with AsyncSessionLocal() as session:
+        task = DocumentTask(
+            workspace_id=workspace_id,
+            conversation_id=conversation_id,
+            filename=filename,
+            status="PENDING",
+            chunks_processed=0
+        )
+        session.add(task)
+        await session.commit()
+        await session.refresh(task)
+        return task.id
+
+
+async def update_document_task_status(task_id: int, status: str, chunks_processed: int = 0, error_message: str = None):
+    async with AsyncSessionLocal() as session:
+        values = {"status": status, "updated_at": func.now()}
+        if chunks_processed:
+            values["chunks_processed"] = chunks_processed
+        if error_message is not None:
+            values["error_message"] = error_message
+        await session.execute(
+            update(DocumentTask).where(DocumentTask.id == task_id).values(**values)
+        )
+        await session.commit()
+
+
+async def get_document_task(task_id: int, workspace_id: int = None) -> dict | None:
+    async with AsyncSessionLocal() as session:
+        stmt = select(DocumentTask).where(DocumentTask.id == task_id)
+        if workspace_id is not None:
+            stmt = stmt.where(DocumentTask.workspace_id == workspace_id)
+        result = await session.execute(stmt)
+        task = result.scalar_one_or_none()
+        if not task:
+            return None
+        return {
+            "id": task.id,
+            "workspace_id": task.workspace_id,
+            "conversation_id": task.conversation_id,
+            "filename": task.filename,
+            "status": task.status,
+            "error_message": task.error_message,
+            "chunks_processed": task.chunks_processed,
+            "created_at": task.created_at,
+            "updated_at": task.updated_at
+        }
+
 

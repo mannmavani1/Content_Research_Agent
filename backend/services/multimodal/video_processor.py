@@ -81,33 +81,32 @@ def process_video_file(file_path: str) -> list:
         ]
         subprocess.run(ffmpeg_frame_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         
-        # 4. Describe up to 3 keyframes using Groq Vision API to conserve tokens & speed up ingestion
+        # 4. Describe up to 3 keyframes concurrently using ThreadPoolExecutor for speed
         extracted_frames = sorted(glob.glob(os.path.join(frames_dir, f"{base_name_no_ext}_frame_*.jpg")))[:3]
         
-        for idx, frame_path in enumerate(extracted_frames):
-            # Parse frame number to get timestamp (frame 1 = 0s, frame 2 = 10s, frame 3 = 20s, etc.)
+        import concurrent.futures
+        from urllib.parse import quote
+
+        def process_single_frame(frame_data):
+            idx, frame_path = frame_data
             seconds = idx * 10
             timestamp_str = format_timestamp(seconds)
             
             try:
-                print(f"Captioning frame {idx + 1} using Groq Vision API...")
+                print(f"Captioning frame {idx + 1} ({timestamp_str})...")
                 caption = caption_image_with_vision(frame_path)
             except Exception as e:
-                print(f"Groq Vision limit on frame {frame_path} ({e}). Using Native Apple Vision OCR fallback...")
+                print(f"Vision API fallback on frame {frame_path} ({e}). Using Native Apple Vision OCR...")
                 from backend.services.multimodal.image_processor import extract_text_via_local_ocr
                 caption = extract_text_via_local_ocr(frame_path)
                 
-            # Create a visual frame chunk
-            from urllib.parse import quote
             relative_frame_url = f"/storage/extracted_frames/{quote(os.path.basename(frame_path))}"
-
-            
             content_text = (
                 f"Video Visual Frame ({filename}) at [{timestamp_str}]:\n"
                 f"Visual Scene Description: \"{caption}\""
             )
             
-            chunks.append({
+            return {
                 "content": content_text,
                 "metadata": {
                     "source": file_path,
@@ -120,7 +119,12 @@ def process_video_file(file_path: str) -> list:
                     "frame_url": relative_frame_url,
                     "caption": caption
                 }
-            })
+            }
+
+        if extracted_frames:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(extracted_frames)) as executor:
+                frame_chunks = list(executor.map(process_single_frame, enumerate(extracted_frames)))
+                chunks.extend(frame_chunks)
             
     except Exception as e:
         print(f"Failed to extract/caption visual keyframes for video {filename}: {e}")

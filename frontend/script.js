@@ -681,15 +681,19 @@ async function handleFileUpload(files) {
         formData.append("conversation_id", currentConversationId);
     }
 
-    showToast(`Uploading and indexing ${file.name}...`, "info");
+    showToast(`Uploading ${file.name}...`, "info");
 
     try {
         const response = await fetch(`${API_URL}/ingestion/upload`, { method: "POST", body: formData });
         const data = await response.json();
 
         if (response.ok && data.status === 200) {
-            showToast(data.message, "success");
-            addFileCard(data.data.filename);
+            showToast("Upload accepted! Processing in background...", "info");
+            if (data.data && data.data.task_id) {
+                pollTaskStatus(data.data.task_id, data.data.filename);
+            } else {
+                addFileCard(data.data.filename);
+            }
         } else {
             throw new Error(data.message || "Failed to upload file");
         }
@@ -700,6 +704,41 @@ async function handleFileUpload(files) {
         const fileInput = document.getElementById("file-upload");
         if (fileInput) fileInput.value = "";
     }
+}
+
+async function pollTaskStatus(taskId, filename) {
+    const pollInterval = 2000;
+    const maxRetries = 150; // up to 5 minutes
+    let retries = 0;
+
+    const poll = async () => {
+        try {
+            const resp = await fetch(`${API_URL}/ingestion/status/${taskId}`);
+            const data = await resp.json();
+            if (resp.ok && data.status === 200 && data.data) {
+                const task = data.data;
+                if (task.status === "COMPLETED") {
+                    showToast(`Successfully indexed ${filename} (${task.chunks_processed || 0} chunks)`, "success");
+                    addFileCard(filename);
+                    return;
+                } else if (task.status === "FAILED") {
+                    showToast(`Failed to process ${filename}: ${task.error_message || 'Processing error'}`, "error");
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error("Error polling task status:", e);
+        }
+
+        retries++;
+        if (retries < maxRetries) {
+            setTimeout(poll, pollInterval);
+        } else {
+            showToast(`Processing timed out for ${filename}`, "error");
+        }
+    };
+
+    setTimeout(poll, 1000);
 }
 
 async function handlePaste() {
@@ -738,9 +777,13 @@ async function handlePaste() {
         });
         const data = await response.json();
         if (response.ok && data.status === 200) {
-            showToast(data.message, "success");
+            showToast("Content accepted! Processing in background...", "info");
             document.getElementById("paste-area").value = "";
-            addFileCard(data.data.filename);
+            if (data.data && data.data.task_id) {
+                pollTaskStatus(data.data.task_id, data.data.filename);
+            } else {
+                addFileCard(data.data.filename);
+            }
         } else {
             throw new Error(data.message || "Failed to process text");
         }

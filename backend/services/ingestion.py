@@ -105,6 +105,7 @@ def extract_and_caption_pdf_images(file_path: str) -> list:
     from langchain_core.documents import Document
     from backend.services.multimodal.image_processor import caption_image_with_vision
     import tempfile
+    import concurrent.futures
     
     doc_chunks = []
     try:
@@ -112,7 +113,9 @@ def extract_and_caption_pdf_images(file_path: str) -> list:
         filename = os.path.basename(file_path)
         temp_dir = tempfile.gettempdir()
         
+        extracted_image_tasks = []
         image_count = 0
+        
         for page_num in range(len(doc)):
             page = doc[page_num]
             image_list = page.get_images(full=True)
@@ -127,37 +130,44 @@ def extract_and_caption_pdf_images(file_path: str) -> list:
                 with open(temp_image_path, "wb") as f:
                     f.write(image_bytes)
                 
-                try:
-                    print(f"Extracted image {xref} from PDF page {page_num + 1}. Captioning...")
-                    caption = caption_image_with_vision(temp_image_path)
-                    
-                    content_text = (
-                        f"PDF Document Visual Component (from {filename}, Page {page_num + 1}):\n"
-                        f"Visual Scene Description: \"{caption}\""
-                    )
-                    
-                    doc_chunks.append(Document(
-                        page_content=content_text,
-                        metadata={
-                            "source": file_path,
-                            "filename": filename,
-                            "media_type": "image",
-                            "page": page_num + 1,
-                            "caption": caption
-                        }
-                    ))
-                    image_count += 1
-                    if image_count >= 15:
-                        print("Reached maximum image extraction limit (15 images). Skipping remaining images.")
-                        break
-                except Exception as e:
-                    print(f"Error captioning extracted PDF image {xref}: {e}")
-                finally:
-                    if os.path.exists(temp_image_path):
-                        os.remove(temp_image_path)
+                extracted_image_tasks.append((page_num + 1, xref, temp_image_path))
+                image_count += 1
+                if image_count >= 8:  # Process up to 8 primary images for fast ingestion
+                    break
             
-            if image_count >= 15:
+            if image_count >= 8:
                 break
+
+        def process_pdf_image(item):
+            page_no, xref, img_path = item
+            try:
+                print(f"Captioning PDF page {page_no} image {xref} in parallel...")
+                caption = caption_image_with_vision(img_path)
+                content_text = (
+                    f"PDF Document Visual Component (from {filename}, Page {page_no}):\n"
+                    f"Visual Scene Description: \"{caption}\""
+                )
+                return Document(
+                    page_content=content_text,
+                    metadata={
+                        "source": file_path,
+                        "filename": filename,
+                        "media_type": "image",
+                        "page": page_no,
+                        "caption": caption
+                    }
+                )
+            except Exception as e:
+                print(f"Error captioning extracted PDF image {xref}: {e}")
+                return None
+            finally:
+                if os.path.exists(img_path):
+                    os.remove(img_path)
+
+        if extracted_image_tasks:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(extracted_image_tasks))) as executor:
+                results = list(executor.map(process_pdf_image, extracted_image_tasks))
+                doc_chunks = [doc for doc in results if doc is not None]
                 
     except Exception as e:
         print(f"Failed to extract images from PDF {file_path}: {e}")
@@ -171,26 +181,26 @@ async def process_document(file_path: str, workspace_id: int, conversation_id: i
     # 1. Multimodal File Ingestion Routing
     if ext in [".jpg", ".jpeg", ".png", ".webp"]:
         from backend.services.multimodal.image_processor import process_image_file
-        chunks = process_image_file(file_path)
+        chunks = await asyncio.to_thread(process_image_file, file_path)
         splits = [Document(page_content=c["content"], metadata=c["metadata"]) for c in chunks]
         print(f"Processed image {file_path} into {len(splits)} chunks")
         
     elif ext in [".mp3", ".wav", ".m4a"]:
         from backend.services.multimodal.audio_processor import process_audio_file
-        chunks = process_audio_file(file_path)
+        chunks = await asyncio.to_thread(process_audio_file, file_path)
         splits = [Document(page_content=c["content"], metadata=c["metadata"]) for c in chunks]
         print(f"Processed audio {file_path} into {len(splits)} chunks")
         
     elif ext in [".mp4", ".mov", ".mkv"]:
         from backend.services.multimodal.video_processor import process_video_file
-        chunks = process_video_file(file_path)
+        chunks = await asyncio.to_thread(process_video_file, file_path)
         splits = [Document(page_content=c["content"], metadata=c["metadata"]) for c in chunks]
         print(f"Processed video {file_path} into {len(splits)} chunks")
         
     else:
         # 2. Standard Text Ingestion Pipeline
         loader = get_loader_for_file(file_path)
-        docs = loader.load()
+        docs = await asyncio.to_thread(loader.load)
         print(f"Loaded {len(docs)} documents of type {type(docs)}")
         
         documents = filter_complex_metadata(docs)
@@ -202,7 +212,7 @@ async def process_document(file_path: str, workspace_id: int, conversation_id: i
         if ext == ".pdf":
             try:
                 print("Running PDF image extraction pass...")
-                visual_splits = extract_and_caption_pdf_images(file_path)
+                visual_splits = await asyncio.to_thread(extract_and_caption_pdf_images, file_path)
                 if visual_splits:
                     print(f"Adding {len(visual_splits)} visual chunks to PDF document splits")
                     splits.extend(visual_splits)
@@ -221,7 +231,7 @@ async def process_document(file_path: str, workspace_id: int, conversation_id: i
     # 4. Store in Chroma Vector Store
     try:
         from backend.database.vector_db import add_documents_to_vector_store
-        add_documents_to_vector_store(splits, workspace_id)
+        await asyncio.to_thread(add_documents_to_vector_store, splits, workspace_id)
         print("Indexed chunks into vector store")
     except Exception as e:
         print(f"Failed to save to vector store: {e}")
@@ -271,3 +281,18 @@ async def reset_database(workspace_id: int):
         print(f"Warning during DB reset: {e}")
 
     print("Database reset complete")
+
+
+async def process_document_background(task_id: int, file_path: str, workspace_id: int, conversation_id: int = None):
+    """
+    Background worker function that updates task status while executing document ingestion.
+    """
+    from backend.database.database import update_document_task_status
+    try:
+        await update_document_task_status(task_id, status="PROCESSING")
+        num_chunks = await process_document(file_path, workspace_id, conversation_id=conversation_id)
+        await update_document_task_status(task_id, status="COMPLETED", chunks_processed=num_chunks)
+        print(f"Background task {task_id} completed successfully with {num_chunks} chunks.")
+    except Exception as e:
+        print(f"Background task {task_id} failed: {e}")
+        await update_document_task_status(task_id, status="FAILED", error_message=str(e))
