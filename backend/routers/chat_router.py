@@ -177,12 +177,22 @@ async def websocket_chat(websocket: WebSocket, user_payload: dict = Depends(get_
                 # Stream events using LangGraph
                 async for event in research_agent.astream_events(initial_state, version="v2"):
                     event_type = event.get("event")
+                    node_name = event.get("metadata", {}).get("langgraph_node", "")
+
                     if event_type == "on_chat_model_stream":
-                        chunk = event["data"]["chunk"]
-                        text = chunk.content
-                        if text:
-                            full_response += text
-                            await websocket.send_json({"type": "chunk", "text": text})
+                        # Only stream response tokens from actual tool execution nodes
+                        if node_name in ["summarize", "qa", "compare", "extract", "insight"] or (not node_name and "evaluate" not in event.get("name", "") and "router" not in event.get("name", "")):
+                            chunk = event["data"]["chunk"]
+                            text = getattr(chunk, "content", str(chunk))
+                            if text:
+                                full_response += text
+                                await websocket.send_json({"type": "chunk", "text": text})
+                    elif event_type == "on_chain_end" and event.get("name") == "LangGraph":
+                        output = event.get("data", {}).get("output", {})
+                        if isinstance(output, dict) and output.get("generation"):
+                            gen = output["generation"]
+                            if not full_response and isinstance(gen, str):
+                                full_response = gen
             except Exception as e:
                 print(f"Error executing agent stream: {e}")
                 await websocket.send_json({"type": "error", "message": f"Execution error: {str(e)}"})

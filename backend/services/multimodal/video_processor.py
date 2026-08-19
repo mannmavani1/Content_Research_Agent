@@ -81,8 +81,8 @@ def process_video_file(file_path: str) -> list:
         ]
         subprocess.run(ffmpeg_frame_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         
-        # 4. Describe frames using Groq Vision API
-        extracted_frames = sorted(glob.glob(os.path.join(frames_dir, f"{base_name_no_ext}_frame_*.jpg")))
+        # 4. Describe up to 3 keyframes using Groq Vision API to conserve tokens & speed up ingestion
+        extracted_frames = sorted(glob.glob(os.path.join(frames_dir, f"{base_name_no_ext}_frame_*.jpg")))[:3]
         
         for idx, frame_path in enumerate(extracted_frames):
             # Parse frame number to get timestamp (frame 1 = 0s, frame 2 = 10s, frame 3 = 20s, etc.)
@@ -93,8 +93,9 @@ def process_video_file(file_path: str) -> list:
                 print(f"Captioning frame {idx + 1} using Groq Vision API...")
                 caption = caption_image_with_vision(frame_path)
             except Exception as e:
-                print(f"Error describing frame {frame_path}: {e}")
-                caption = "Visual scene."
+                print(f"Groq Vision limit on frame {frame_path} ({e}). Using Native Apple Vision OCR fallback...")
+                from backend.services.multimodal.image_processor import extract_text_via_local_ocr
+                caption = extract_text_via_local_ocr(frame_path)
                 
             # Create a visual frame chunk
             from urllib.parse import quote

@@ -179,3 +179,7 @@ zstandard==0.25.0
 alembic
 asyncpg
 psycopg2-binary
+google-generativeai>=0.8.6
+google-genai>=2.18.1
+ocrmac>=1.0.1
+

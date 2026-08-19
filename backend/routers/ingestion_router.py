@@ -128,10 +128,10 @@ async def delete_file(filename: str, conversation_id: Optional[int] = None, curr
             
     # 2. Database chunks delete
     try:
-        chunks_deleted = await delete_document_chunks(filename, workspace_id=workspace_id)
+        chunks_deleted = await delete_document_chunks(filename, workspace_id=workspace_id, conversation_id=conversation_id)
         # Also clean vector store
         from backend.database.vector_db import delete_vector_store_documents
-        delete_vector_store_documents(filename, workspace_id=workspace_id)
+        delete_vector_store_documents(filename, workspace_id=workspace_id, conversation_id=conversation_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to remove database records: {str(e)}")
         
@@ -149,14 +149,14 @@ async def delete_file(filename: str, conversation_id: Optional[int] = None, curr
 @router.get("/files/{conversation_id}", response_model=StandardResponse)
 async def get_files(conversation_id: int = Path(...), current_user: dict = Depends(get_current_user)):
     """
-    Fetches the list of filenames active in the specified workspace.
+    Fetches the list of filenames active in the specified conversation.
     """
     workspace_id = get_workspace_id(current_user)
     if not await verify_conversation_owner(conversation_id, workspace_id):
         raise HTTPException(status_code=403, detail="Access denied to this conversation.")
 
     try:
-        files = await get_files_for_workspace(workspace_id)
+        files = await get_files_for_workspace(workspace_id, conversation_id=conversation_id)
         return success_response(
             message="Files fetched successfully",
             data={"files": files}

@@ -12,18 +12,22 @@ let activeLoadingId = null;
 (function injectCursorStyles() {
     const style = document.createElement('style');
     style.textContent = `
-        .streaming-message > *:last-child::after {
-            content: '▋';
+        .stream-cursor {
             display: inline-block;
-            animation: cursorBlink 1s steps(2, start) infinite;
+            width: 7px;
+            height: 15px;
+            background-color: #8b5cf6;
+            border-radius: 2px;
             margin-left: 4px;
-            color: #8b5cf6;
+            vertical-align: -2px;
+            animation: cursorBlink 0.8s infinite;
         }
-        .dark .streaming-message > *:last-child::after {
-            color: #a78bfa;
+        .dark .stream-cursor {
+            background-color: #a78bfa;
         }
         @keyframes cursorBlink {
-            to { visibility: hidden; }
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
         }
     `;
     document.head.appendChild(style);
@@ -246,19 +250,45 @@ async function deleteConversation(id) {
 }
 
 async function createNewConversation() {
+    const { value: title, isDismissed } = await Swal.fire({
+        title: 'New Research Chat',
+        text: 'Enter a name for this session:',
+        input: 'text',
+        inputPlaceholder: 'e.g. Market Analysis, Project Research...',
+        inputValue: 'New Chat',
+        showCancelButton: true,
+        confirmButtonText: 'Create Session',
+        confirmButtonColor: '#8b5cf6',
+        cancelButtonText: 'Cancel',
+        cancelButtonColor: '#64748b',
+        customClass: {
+            popup: 'rounded-2xl dark:bg-slate-900 dark:text-white',
+            input: 'rounded-xl text-sm border-slate-300 dark:border-white/10 dark:bg-slate-800 dark:text-white'
+        },
+        inputValidator: (value) => {
+            if (!value || !value.trim()) {
+                return 'Please enter a name for the chat session!';
+            }
+        }
+    });
+
+    if (isDismissed || !title) return;
+
     try {
         const response = await fetch(`${API_URL}/tools/conversations`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: "New Chat" })
+            body: JSON.stringify({ title: title.trim() })
         });
         const data = await response.json();
         if (data.status === 200) {
             await loadConversations();
             switchConversation(data.data.id);
+            showToast(`Created session: "${title.trim()}"`, "success");
         }
     } catch (e) {
         console.error(e);
+        showToast("Failed to create conversation", "error");
     }
 }
 
@@ -491,7 +521,12 @@ function addFileCard(filename) {
     const list = document.getElementById("file-list");
     const title = document.getElementById("file-list-title");
 
-    title.classList.remove("hidden");
+    if (title) title.classList.remove("hidden");
+    if (!list) return;
+
+    // Prevent duplicate DOM cards
+    const existing = Array.from(list.querySelectorAll("p[title]")).find(p => p.getAttribute("title") === filename);
+    if (existing) return;
 
     const ext = filename.split('.').pop().toLowerCase();
     let icon = "description";
@@ -612,16 +647,41 @@ async function deleteFileWorkspace(event, filename, cardElement) {
 // ==========================================
 // 4. INGESTION (UPLOAD & PASTE)
 // ==========================================
+let isUploadingFile = false;
+
 async function handleFileUpload(files) {
-    if (files.length === 0) return;
+    if (!files || files.length === 0) return;
+    if (isUploadingFile) return;
+    isUploadingFile = true;
+
     const file = files[0];
+
+    // If no conversation is selected, auto-create one first
+    if (!currentConversationId) {
+        try {
+            const resp = await fetch(`${API_URL}/tools/conversations`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: file.name.replace(/\.[^/.]+$/, "") || "New Chat" })
+            });
+            const convData = await resp.json();
+            if (convData.status === 200 && convData.data) {
+                currentConversationId = convData.data.id;
+                await loadConversationsWithoutSwitching();
+                switchConversation(currentConversationId);
+            }
+        } catch (err) {
+            console.error("Failed to auto-create conversation for upload:", err);
+        }
+    }
+
     const formData = new FormData();
     formData.append("file", file);
     if (currentConversationId) {
         formData.append("conversation_id", currentConversationId);
     }
 
-    showToast("Uploading and indexing...", "info");
+    showToast(`Uploading and indexing ${file.name}...`, "info");
 
     try {
         const response = await fetch(`${API_URL}/ingestion/upload`, { method: "POST", body: formData });
@@ -635,12 +695,35 @@ async function handleFileUpload(files) {
         }
     } catch (error) {
         showToast(error.message, "error");
+    } finally {
+        isUploadingFile = false;
+        const fileInput = document.getElementById("file-upload");
+        if (fileInput) fileInput.value = "";
     }
 }
 
 async function handlePaste() {
     const text = document.getElementById("paste-area").value;
     if (!text.trim()) { showToast("Please enter some text", "error"); return; }
+
+    // If no conversation is selected, auto-create one first
+    if (!currentConversationId) {
+        try {
+            const resp = await fetch(`${API_URL}/tools/conversations`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: "Pasted Context Chat" })
+            });
+            const convData = await resp.json();
+            if (convData.status === 200 && convData.data) {
+                currentConversationId = convData.data.id;
+                await loadConversationsWithoutSwitching();
+                switchConversation(currentConversationId);
+            }
+        } catch (err) {
+            console.error("Failed to auto-create conversation for paste:", err);
+        }
+    }
 
     try {
         const bodyData = { text: text };
@@ -821,13 +904,13 @@ function appendBotStreamMessage(id) {
     const history = document.getElementById("chat-history");
     const div = document.createElement("div");
     div.id = id;
-    div.className = "msg-animate flex gap-4 max-w-4xl mx-auto";
+    div.className = "flex gap-4 max-w-4xl mx-auto";
     div.innerHTML = `
         <div class="w-9 h-9 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 flex items-center justify-center flex-shrink-0 shadow-md">
             <span class="material-symbols-rounded text-lg">terminal</span>
         </div>
         <div class="flex-1 min-w-0 max-w-3xl">
-            <div class="message-content streaming-message glass-card border border-white/5 text-slate-200 w-full overflow-hidden px-5 py-4 rounded-2xl rounded-tl-none text-[13px] leading-relaxed prose prose-p:my-1 prose-ul:my-1 break-words">
+            <div class="message-content glass-card border border-white/5 text-slate-200 w-full overflow-hidden px-5 py-4 rounded-2xl rounded-tl-none text-[13px] leading-relaxed prose prose-p:my-1 prose-ul:my-1 break-words">
                 <p></p>
             </div>
             <div class="action-panel flex justify-end mt-2 hidden">
@@ -840,57 +923,132 @@ function appendBotStreamMessage(id) {
         </div>
     `;
     history.appendChild(div);
+
+    // Apply Framer Motion smooth entrance
+    if (window.Motion && typeof window.Motion.animate === "function") {
+        window.Motion.animate(div, { opacity: [0, 1], y: [10, 0] }, { duration: 0.3, easing: [0.16, 1, 0.3, 1] });
+    }
+
     history.scrollTop = history.scrollHeight;
     return div;
+}
+
+let streamRenderRaf = null;
+let pendingStreamPayload = null;
+let smoothScrollRaf = null;
+
+function triggerSmoothScroll() {
+    const history = document.getElementById("chat-history");
+    if (!history) return;
+    
+    const isNearBottom = history.scrollHeight - history.scrollTop - history.clientHeight < 400;
+    if (!isNearBottom) return;
+
+    if (smoothScrollRaf) cancelAnimationFrame(smoothScrollRaf);
+
+    const step = () => {
+        const target = history.scrollHeight - history.clientHeight;
+        const diff = target - history.scrollTop;
+        if (diff > 1) {
+            history.scrollTop += Math.max(16, Math.ceil(diff * 0.65));
+            smoothScrollRaf = requestAnimationFrame(step);
+        } else {
+            history.scrollTop = target;
+            smoothScrollRaf = null;
+        }
+    };
+    smoothScrollRaf = requestAnimationFrame(step);
 }
 
 function updateBotStreamMessage(id, text, isDone = false) {
     const div = document.getElementById(id);
     if (!div) return;
 
+    if (isDone) {
+        if (streamRenderRaf) {
+            cancelAnimationFrame(streamRenderRaf);
+            streamRenderRaf = null;
+        }
+        renderStreamContent(div, text, true);
+        return;
+    }
+
+    pendingStreamPayload = { div, text };
+    if (!streamRenderRaf) {
+        streamRenderRaf = requestAnimationFrame(() => {
+            streamRenderRaf = null;
+            if (pendingStreamPayload) {
+                renderStreamContent(pendingStreamPayload.div, pendingStreamPayload.text, false);
+            }
+        });
+    }
+}
+
+function renderStreamContent(div, text, isDone) {
     const messageContentDiv = div.querySelector(".message-content");
     const actionPanel = div.querySelector(".action-panel");
+    if (!messageContentDiv) return;
 
-    if (messageContentDiv) {
-        const processedText = prepareMarkdownText(text);
-        if (isDone) {
-            messageContentDiv.classList.remove("streaming-message");
-            messageContentDiv.innerHTML = marked.parse(processedText);
+    const processedText = prepareMarkdownText(text);
 
-            // Attach interactive styling and lightbox modal click handler to any rendered <img> elements
-            messageContentDiv.querySelectorAll("img").forEach(img => {
-                img.className = "rounded-2xl border border-slate-200 dark:border-white/10 shadow-lg my-3 max-h-80 max-w-full object-contain cursor-pointer transition-all duration-200 hover:scale-[1.015] hover:shadow-brand-500/20";
-                img.title = "Click to view full size";
-                img.onclick = () => openImageModal(img.src, img.alt);
-            });
+    if (isDone) {
+        messageContentDiv.innerHTML = marked.parse(processedText || "*(Empty response)*");
 
-            // Show download button
-            if (actionPanel) {
-                actionPanel.classList.remove("hidden");
-                const downloadBtnEl = actionPanel.querySelector('.download-report-btn');
-                if (downloadBtnEl) {
-                    downloadBtnEl.onclick = () => downloadReportDirect(text);
-                }
+        // Attach interactive styling and lightbox modal click handler to any rendered <img> elements
+        messageContentDiv.querySelectorAll("img").forEach(img => {
+            img.className = "rounded-2xl border border-slate-200 dark:border-white/10 shadow-lg my-3 max-h-80 max-w-full object-contain cursor-pointer transition-all duration-200 hover:scale-[1.015] hover:shadow-brand-500/20";
+            img.title = "Click to view full size";
+            img.onclick = () => openImageModal(img.src, img.alt);
+        });
+
+        // Show download button with Motion spring animation
+        if (actionPanel) {
+            actionPanel.classList.remove("hidden");
+            if (window.Motion && typeof window.Motion.animate === "function") {
+                window.Motion.animate(actionPanel, { opacity: [0, 1], y: [4, 0] }, { duration: 0.25, easing: "ease-out" });
             }
+            const downloadBtnEl = actionPanel.querySelector('.download-report-btn');
+            if (downloadBtnEl) {
+                downloadBtnEl.onclick = () => downloadReportDirect(text);
+            }
+        }
+    } else {
+        if (processedText) {
+            let parsedHtml = marked.parse(processedText);
+            // Append inline cursor safely before closing tag
+            if (parsedHtml.includes("</p>")) {
+                parsedHtml = parsedHtml.replace(/<\/p>$/, '<span class="stream-cursor"></span></p>');
+            } else if (parsedHtml.includes("</li>")) {
+                parsedHtml = parsedHtml.replace(/<\/li>$/, '<span class="stream-cursor"></span></li>');
+            } else {
+                parsedHtml += '<span class="stream-cursor"></span>';
+            }
+            messageContentDiv.innerHTML = parsedHtml;
         } else {
-            messageContentDiv.innerHTML = marked.parse(processedText);
+            messageContentDiv.innerHTML = '<span class="inline-flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 italic"><span class="w-2 h-2 rounded-full bg-brand-500 animate-ping"></span> Thinking & analyzing...</span>';
         }
     }
 
-    const history = document.getElementById("chat-history");
-    history.scrollTop = history.scrollHeight;
+    triggerSmoothScroll();
 }
 
-// ==========================================
-// 8. UI HELPERS (APPEND MESSAGE & LOADING)
-// ==========================================
 // ==========================================
 // 8. UI HELPERS (APPEND MESSAGE & LOADING)
 // ==========================================
 function prepareMarkdownText(text) {
     if (!text) return "";
     
-    let cleaned = text.trim();
+    let cleaned = text;
+    
+    // Check if there is text outside <think>...</think>
+    const withoutThink = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<think>[\s\S]*$/gi, "").trim();
+    
+    if (withoutThink.length > 0) {
+        cleaned = withoutThink;
+    } else {
+        // Fallback: If content was inside think tags, strip only the tags so text is still visible
+        cleaned = cleaned.replace(/<\/?think>/gi, "").trim();
+    }
     
     // Strip redundant outer ```markdown ... ``` or ```md ... ``` wrappers if the LLM wrapped the entire answer in a code block
     const outerCodeBlockRegex = /^```(?:markdown|md)?\s*([\s\S]*?)\s*```$/i;
@@ -1103,6 +1261,18 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// Explicitly bind file input change listener for robust Safari compatibility
+document.addEventListener("DOMContentLoaded", () => {
+    const fileInput = document.getElementById("file-upload");
+    if (fileInput) {
+        fileInput.addEventListener("change", (e) => {
+            if (e.target && e.target.files && e.target.files.length > 0) {
+                handleFileUpload(e.target.files);
+            }
+        });
+    }
+});
+
 // ==========================================
 // AUTHENTICATION
 // ==========================================
@@ -1111,4 +1281,5 @@ async function logout() {
     // logout redirect natively without triggering CORS restrictions.
     window.location.href = `${API_URL}/auth/logout`;
 }
+
 

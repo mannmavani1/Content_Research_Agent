@@ -12,6 +12,21 @@ from backend.services.llm import get_llm
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
+import re
+import json
+
+def parse_llm_json(response) -> dict:
+    """Helper to parse JSON from LLMs that may include <think>...</think> reasoning tags or markdown blocks."""
+    text = getattr(response, "content", str(response))
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
+    match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+    if match:
+        raw_json = match.group(1).strip()
+    else:
+        match = re.search(r'(\{.*?\})', text, re.DOTALL)
+        raw_json = match.group(1).strip() if match else text
+    return json.loads(raw_json)
+
 async def router_node(state: AgentState):
     """
     Analyzes the user's query and routes the workflow to the appropriate processing node.
@@ -23,39 +38,55 @@ async def router_node(state: AgentState):
         dict: A dictionary containing the 'generation' key with the predicted tool category 
               (e.g., 'summarize', 'compare', 'extract', 'insight', or 'qa').
     """
-    question = state["question"]
-    print(f"Routing: {question}")
+    raw_question = state["question"]
+    q_lower = raw_question.lower().strip()
+    
+    # 1. Zero-latency instant heuristic matching (0ms)
+    if any(w in q_lower for w in ["compare", "versus", " vs ", "difference between", "contrasting", "comparison"]):
+        print(f"Routing (instant heuristic): compare")
+        return {"generation": "compare"}
+    if any(w in q_lower for w in ["summarize", "summary", "tl;dr", "tldr", "overview", "briefly explain", "synopsis"]):
+        print(f"Routing (instant heuristic): summarize")
+        return {"generation": "summarize"}
+    if any(w in q_lower for w in ["extract", "pull out", "give me numbers", "exact data", "list all", "key metrics"]):
+        print(f"Routing (instant heuristic): extract")
+        return {"generation": "extract"}
+    if any(w in q_lower for w in ["insight", "analyze", "analysis", "recommend", "correct", "evaluate", "what does this mean", "strategy", "opinion", "is my approach"]):
+        print(f"Routing (instant heuristic): insight")
+        return {"generation": "insight"}
 
+    print(f"Routing via LLM: {raw_question}")
     llm = get_llm(streaming=False)
 
     prompt = PromptTemplate.from_template(
-        """You are a routing agent. Your ONLY job is to classify the user's query.
-        Do not answer the question. Just output JSON.
-        
-        Categories:
-        - "summarize": Requests for summaries, overviews, or "tl;dr".
-        - "compare": Requests to compare multiple items or documents.
-        - "extract": Requests for specific numbers, tables, data points, or lists.
-        - "insight": Requests for recommendations, analysis, or "what does this mean".
-        - "qa": General questions, specific facts, or anything else.
-        
-        Output format must be strict JSON: {{"category": "summarize"}}
-        
-        Query: {question}
-        """
+        """You are a query classifier. Output JSON ONLY.
+Categories:
+- "summarize": Requests for summaries or overviews.
+- "compare": Requests to compare multiple items or documents.
+- "extract": Requests for numbers, data points, or tables.
+- "insight": Requests for recommendations or analytical evaluation.
+- "qa": General questions or specific facts.
+
+Output format: {{"category": "qa"}}
+
+Query: {question}
+"""
     )
 
-    router_chain = prompt | llm | JsonOutputParser()
+    chain = prompt | llm
 
     try:
-        decision = await router_chain.ainvoke({"question": question})
+        response = await chain.ainvoke({"question": raw_question})
+        decision = parse_llm_json(response)
         category = decision.get("category", "qa")
         print(f"Routed to: {category}")
     except Exception as e:
         category = "qa"
-        print(f"Routing failed due to {e}, defaulting to: {category}")
+        print(f"Routing fallback: {category}")
 
     return {"generation": category}
+
+
 
 async def retrieve_node(state: AgentState):
     """
@@ -198,38 +229,22 @@ async def evaluate_context_node(state: AgentState):
     """
     docs = state.get("documents", [])
     if not docs:
-        print("No documents retrieved. Web search is required.")
+        print("No documents retrieved from local database. Web search is required.")
         return {"needs_search": True}
-        
-    context = "\n\n".join(docs)
-    question = state.get("question", "")
+
+    question = state.get("question", "").lower()
     
-    llm = get_llm(streaming=False)
-    prompt = PromptTemplate.from_template(
-        """You are an information grading agent. Your job is to determine whether the provided document context has sufficient information to answer the user's question.
-        
-        If the question requires information that is not in the context (such as more recent statistics, comparison with future/unreleased data, details of subsequent years, or is completely unrelated to the documents), you must reply with needs_search: true.
-        Otherwise, if the question can be fully answered using the provided context, reply with needs_search: false.
-        
-        Document Context:
-        {context}
-        
-        User Question:
-        {question}
-        
-        Output format must be strict JSON: {{"needs_search": true}} or {{"needs_search": false}}
-        """
-    )
-    
-    chain = prompt | llm | JsonOutputParser()
-    try:
-        result = await chain.ainvoke({"context": context, "question": question})
-        needs_search = result.get("needs_search", False)
-        print(f"Context evaluation result: needs_search = {needs_search}")
-        return {"needs_search": needs_search}
-    except Exception as e:
-        print(f"Error evaluating context: {e}, defaulting to no web search.")
+    # If the user explicitly asks for web search or online info
+    if any(k in question for k in ["search web", "google this", "online", "latest news", "internet search"]):
+        print("Web search explicitly requested by user.")
+        return {"needs_search": True}
+
+    # If local documents are found and user refers to their files or general query, skip slow web search
+    if len(docs) > 0:
+        print(f"Local context found ({len(docs)} chunks). Using local documents without external search latency.")
         return {"needs_search": False}
+
+    return {"needs_search": False}
 
 async def web_search_node(state: AgentState):
     """

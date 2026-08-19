@@ -1,4 +1,5 @@
 import os
+import chromadb
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from backend.config.settings import settings
@@ -14,6 +15,15 @@ def get_embeddings():
 
 # Place Chroma DB in storage directory alongside sqlite db
 PERSIST_DIRECTORY = os.path.join(settings.LOCAL_DB_DIR, "chroma_db")
+
+_chroma_client = None
+
+def get_raw_chroma_client():
+    global _chroma_client
+    if _chroma_client is None:
+        os.makedirs(PERSIST_DIRECTORY, exist_ok=True)
+        _chroma_client = chromadb.PersistentClient(path=PERSIST_DIRECTORY)
+    return _chroma_client
 
 def get_vector_store(workspace_id: int = None) -> Chroma:
     """
@@ -43,30 +53,63 @@ def search_vector_store(query: str, workspace_id: int = None, k: int = 5):
     db = get_vector_store(workspace_id)
     return db.similarity_search(query, k=k)
 
-def delete_vector_store_documents(filename: str, workspace_id: int = None):
+def delete_vector_store_documents(filename: str, workspace_id: int = None, conversation_id: int = None):
     """
-    Deletes all vector store records associated with a specific filename.
+    Deletes all vector store records associated with a specific filename and optional conversation using direct client.
     """
-    db = get_vector_store(workspace_id)
-    collection = db._collection
-    # Fetch all records to filter by metadata source
-    results = collection.get()
-    ids_to_delete = []
-    
-    for i, meta in enumerate(results.get("metadatas", [])):
-        if meta and (os.path.basename(meta.get("source", "")) == filename or meta.get("source", "") == filename):
-            ids_to_delete.append(results["ids"][i])
-            
-    if ids_to_delete:
-        collection.delete(ids=ids_to_delete)
+    try:
+        client = get_raw_chroma_client()
+        collection_name = f"workspace_{workspace_id}" if workspace_id is not None else "global_docs"
+        try:
+            collection = client.get_collection(collection_name)
+        except Exception:
+            return
+
+        # Fetch records to match exact basename or path
+        results = collection.get()
+        ids_to_delete = []
+        
+        for i, meta in enumerate(results.get("metadatas", [])):
+            if not meta:
+                continue
+            if conversation_id is not None and meta.get("conversation_id") != conversation_id:
+                continue
+            source = meta.get("source", "")
+            if os.path.basename(source) == filename or source == filename:
+                ids_to_delete.append(results["ids"][i])
+                
+        if ids_to_delete:
+            collection.delete(ids=ids_to_delete)
+    except Exception as e:
+        print(f"Error deleting vector store documents: {e}")
+
+def delete_vector_store_conversation(conversation_id: int, workspace_id: int = None):
+    """
+    Ultra-fast direct deletion of all vector store records for a conversation without loading PyTorch.
+    """
+    try:
+        client = get_raw_chroma_client()
+        collection_name = f"workspace_{workspace_id}" if workspace_id is not None else "global_docs"
+        try:
+            collection = client.get_collection(collection_name)
+        except Exception:
+            return
+        collection.delete(where={"conversation_id": conversation_id})
+    except Exception as e:
+        print(f"Error deleting vector store conversation: {e}")
 
 def delete_all_vector_store_documents(workspace_id: int = None):
     """
     Clears all documents from the vector store collection.
     """
-    db = get_vector_store(workspace_id)
-    collection = db._collection
-    results = collection.get()
-    ids = results.get("ids", [])
-    if ids:
-        collection.delete(ids=ids)
+    try:
+        client = get_raw_chroma_client()
+        collection_name = f"workspace_{workspace_id}" if workspace_id is not None else "global_docs"
+        try:
+            client.delete_collection(collection_name)
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"Error clearing vector store: {e}")
+
+

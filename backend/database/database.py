@@ -68,10 +68,62 @@ async def verify_conversation_owner(conversation_id: int, workspace_id: int) -> 
 
 async def delete_conversation(conversation_id: int, workspace_id: int):
     async with AsyncSessionLocal() as session:
+        # 1. Query all documents in this workspace to find ones associated with this conversation
+        stmt = select(Document).where(Document.workspace_id == workspace_id)
+        result = await session.execute(stmt)
+        docs = result.scalars().all()
+
+        doc_ids_to_delete = []
+        files_to_check = set()
+
+        for doc in docs:
+            meta = doc.metadata_json or {}
+            if meta.get("conversation_id") == conversation_id:
+                doc_ids_to_delete.append(doc.id)
+                source = meta.get("source", "")
+                if source:
+                    files_to_check.add(source)
+
+        # 2. Check if files are used by other conversations in this workspace
+        if files_to_check:
+            other_docs = [d for d in docs if d.id not in doc_ids_to_delete]
+            other_sources = set()
+            for od in other_docs:
+                m = od.metadata_json or {}
+                s = m.get("source", "")
+                if s:
+                    other_sources.add(s)
+                    other_sources.add(os.path.basename(s))
+
+            for file_target in files_to_check:
+                file_name = os.path.basename(file_target)
+                if file_target not in other_sources and file_name not in other_sources:
+                    # Remove physical file if no other documents reference it
+                    cand_path = file_target if os.path.isabs(file_target) else os.path.join(settings.UPLOAD_DIR, file_name)
+                    if os.path.exists(cand_path):
+                        try:
+                            os.remove(cand_path)
+                        except Exception as e:
+                            print(f"Failed to remove physical file {cand_path}: {e}")
+
+        # 3. Delete Document records & their linked Knowledge Graph triplets
+        if doc_ids_to_delete:
+            await session.execute(delete(KnowledgeGraph).where(KnowledgeGraph.chunk_id.in_(doc_ids_to_delete)))
+            await session.execute(delete(Document).where(Document.id.in_(doc_ids_to_delete)))
+
+        # 4. Delete the conversation itself (cascades to messages & conversation knowledge graph)
         await session.execute(
             delete(Conversation).where(Conversation.id == conversation_id, Conversation.workspace_id == workspace_id)
         )
         await session.commit()
+
+    # 5. Clean up Chroma vector store for this conversation
+    try:
+        from backend.database.vector_db import delete_vector_store_conversation
+        delete_vector_store_conversation(conversation_id, workspace_id=workspace_id)
+    except Exception as e:
+        print(f"Failed to delete vector store records for conversation {conversation_id}: {e}")
+
 
 async def rename_conversation(conversation_id: int, new_title: str, workspace_id: int):
     async with AsyncSessionLocal() as session:
@@ -168,7 +220,7 @@ async def search_documents(query: str, workspace_id: int, limit: int = 5):
 
         return results
 
-async def delete_document_chunks(filename: str, workspace_id: int) -> int:
+async def delete_document_chunks(filename: str, workspace_id: int, conversation_id: int = None) -> int:
     async with AsyncSessionLocal() as session:
         stmt = select(Document).where(Document.workspace_id == workspace_id)
         result = await session.execute(stmt)
@@ -177,6 +229,8 @@ async def delete_document_chunks(filename: str, workspace_id: int) -> int:
         ids_to_delete = []
         for doc in docs:
             meta = doc.metadata_json or {}
+            if conversation_id is not None and meta.get("conversation_id") != conversation_id:
+                continue
             source = meta.get("source", "")
             if os.path.basename(source) == filename or source == filename:
                 ids_to_delete.append(doc.id)
@@ -199,14 +253,20 @@ async def delete_all_documents(workspace_id: int):
         await session.execute(delete(Document).where(Document.workspace_id == workspace_id))
         await session.commit()
 
-async def get_files_for_workspace(workspace_id: int) -> list:
+async def get_files_for_workspace(workspace_id: int, conversation_id: int = None) -> list:
     async with AsyncSessionLocal() as session:
         stmt = select(Document.metadata_json).where(Document.workspace_id == workspace_id)
         res = await session.execute(stmt)
         files = set()
         for metadata_json in res.scalars():
             if metadata_json:
+                if conversation_id is not None and metadata_json.get("conversation_id") != conversation_id:
+                    continue
                 source = metadata_json.get("source", "")
                 if source:
                     files.add(os.path.basename(source))
         return list(files)
+
+async def get_files_for_conversation(workspace_id: int, conversation_id: int) -> list:
+    return await get_files_for_workspace(workspace_id, conversation_id=conversation_id)
+

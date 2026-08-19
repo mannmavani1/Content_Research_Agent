@@ -21,10 +21,15 @@ def get_llm(streaming: bool = True):
     Returns:
         ChatGroq: An instance of the LangChain-compatible Groq LLM wrapper.
     """
-    return ChatGroq(
-        model=settings.LLM_MODEL,
-        temperature=0,
-        max_retries=2,
-        streaming=streaming,
-        api_key=os.getenv("GROQ_API_KEY")
-    )
+    kwargs = {
+        "model": settings.LLM_MODEL,
+        "temperature": 0,
+        "max_retries": 2,
+        "streaming": streaming,
+        "api_key": os.getenv("GROQ_API_KEY")
+    }
+    # Hide internal chain-of-thought tokens for reasoning models (e.g. Qwen)
+    if "qwen" in settings.LLM_MODEL.lower() or "deepseek" in settings.LLM_MODEL.lower():
+        kwargs["reasoning_format"] = "hidden"
+
+    return ChatGroq(**kwargs)

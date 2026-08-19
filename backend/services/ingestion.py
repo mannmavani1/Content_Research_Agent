@@ -1,5 +1,6 @@
 import os
 import shutil
+import asyncio
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores.utils import filter_complex_metadata
 from backend.database.database import add_documents, add_triplets
@@ -19,57 +20,85 @@ def get_loader_for_file(file_path: str):
     elif ext == ".pptx": return UnstructuredPowerPointLoader(file_path, mode="elements")
     else: raise ValueError(f"Unsupported file type: {ext}")
 
-def extract_triplets_from_text(text: str) -> list:
+async def async_extract_triplets_from_text(text: str) -> list:
     from backend.services.llm import get_llm
     from langchain_core.prompts import PromptTemplate
     import re
     import json
 
-    llm = get_llm()
+    llm = get_llm(streaming=False)
     prompt = PromptTemplate.from_template(
-        """You are an advanced Knowledge Graph extraction agent. Your job is to read the provided text chunk and extract key semantic relationships between entities.
-        
-        Extract relationships in the form of triplets: (Subject, Predicate, Object).
-        - Subject and Object should be specific entities (names of companies, people, places, dates, products, concepts, etc.).
-        - Predicate should be a short verb or relation representing the connection (e.g., "acquired", "subsidiary of", "founded by", "partnered with", "is a").
-        
-        If no clear relationships are found, return an empty list.
-        
-        Output format must be a strict JSON list of objects (do not include any introduction or explanation, output ONLY the raw JSON):
-        [
-          {{"subject": "Entity A", "predicate": "relationship", "object": "Entity B"}},
-          ...
-        ]
-        
-        Text: {text}
-        """
+        """Extract relationships from text in the form of triplets: (Subject, Predicate, Object).
+Output ONLY a JSON list:
+[
+  {{"subject": "Entity A", "predicate": "relationship", "object": "Entity B"}}
+]
+
+Text: {text}
+"""
     )
     chain = prompt | llm
     try:
-        response = chain.invoke({"text": text})
+        # Limit token count to prevent rate limits
+        response = await chain.ainvoke({"text": text[:500]})
         response_text = getattr(response, "content", str(response))
-        match = re.search(r'\[\s*\{.*\}\s*\]', response_text, re.DOTALL)
-        if not match:
-            match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            
-        if not match:
-            print(f"No JSON block found in response: {response_text[:100]}")
-            return []
-            
-        data = json.loads(match.group(0))
+        
+        # 1. Strip reasoning / thinking tags if present
+        response_text = re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL).strip()
+        
+        # 2. Extract JSON code block if wrapped in markdown
+        json_match = re.search(r'```(?:json)?\s*(\[.*?\]|\{.*?\})\s*```', response_text, re.DOTALL)
+        if json_match:
+            raw_json = json_match.group(1).strip()
+        else:
+            array_match = re.search(r'(\[\s*\{.*?\}\s*\])', response_text, re.DOTALL)
+            if array_match:
+                raw_json = array_match.group(1).strip()
+            else:
+                obj_match = re.search(r'(\{.*?\})', response_text, re.DOTALL)
+                raw_json = obj_match.group(1).strip() if obj_match else response_text
+
+        try:
+            data = json.loads(raw_json)
+        except Exception:
+            individual_objs = re.findall(r'\{\s*"subject"\s*:\s*".*?"\s*,\s*"predicate"\s*:\s*".*?"\s*,\s*"object"\s*:\s*".*?"\s*\}', response_text, re.DOTALL)
+            if individual_objs:
+                data = [json.loads(o) for o in individual_objs]
+            else:
+                data = []
+
         results = data if isinstance(data, list) else [data]
         
         triplets = []
         for item in results:
-            s = item.get("subject")
-            p = item.get("predicate")
-            o = item.get("object")
-            if s and p and o:
-                triplets.append((s, p, o))
+            if isinstance(item, dict):
+                s = item.get("subject")
+                p = item.get("predicate")
+                o = item.get("object")
+                if s and p and o:
+                    triplets.append((str(s).strip(), str(p).strip(), str(o).strip()))
         return triplets
     except Exception as e:
-        print(f"Failed to extract triplets: {e}")
+        if "429" not in str(e):
+            print(f"Failed to extract triplets: {e}")
         return []
+
+
+def extract_triplets_from_text(text: str) -> list:
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    if loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return pool.submit(lambda: asyncio.run(async_extract_triplets_from_text(text))).result()
+    else:
+        return loop.run_until_complete(async_extract_triplets_from_text(text))
+
+
 
 def extract_and_caption_pdf_images(file_path: str) -> list:
     import fitz
@@ -199,14 +228,21 @@ async def process_document(file_path: str, workspace_id: int, conversation_id: i
         
     # 5. Extract and Store Knowledge Graph triplets (GraphRAG)
     if conversation_id is not None:
-        print("Extracting knowledge graph triplets...")
-        # Extract triplets for up to 30 chunks to prevent rate limits
-        for i, split in enumerate(splits[:30]):
-            chunk_id = inserted_ids[i] if i < len(inserted_ids) else None
-            triplets = extract_triplets_from_text(split.page_content)
-            if triplets:
-                await add_triplets(triplets, conversation_id, chunk_id)
+        print("Extracting knowledge graph triplets in parallel...")
+        # Process key chunks to stay well within model rate limits
+        target_splits = splits[:4]
+        sem = asyncio.Semaphore(2)
+
+        async def process_triplets_for_chunk(idx, split):
+            chunk_id = inserted_ids[idx] if idx < len(inserted_ids) else None
+            async with sem:
+                triplets = await async_extract_triplets_from_text(split.page_content)
+                if triplets:
+                    await add_triplets(triplets, conversation_id, chunk_id)
+
+        await asyncio.gather(*(process_triplets_for_chunk(i, s) for i, s in enumerate(target_splits)))
         print(f"Graph extraction completed.")
+
     
     return len(splits)
 

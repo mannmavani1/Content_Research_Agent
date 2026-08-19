@@ -33,7 +33,7 @@ class Settings:
     UPLOAD_DIR = os.path.join(STORAGE_DIR, "uploads")
     LOCAL_DB_DIR = os.path.join(STORAGE_DIR, "local_db")
     
-    LLM_MODEL: str = "llama-3.3-70b-versatile"
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
     RETRIEVAL_STRATEGY: str = "vectorless"
     POSTGRES_URL: str = os.getenv("DB_URL", "postgresql+asyncpg://localhost:5432/content_agent")
 
